@@ -1,8 +1,3 @@
-//! App flow:
-//! Build Client App -> sso login ->
-//! interactive login -> acquire access token silent -> acquire access token interactive
-//! logout
-
 // Define all the js types in pure rust so that intellisense plays nice and can
 // create a builder pattern
 
@@ -209,9 +204,10 @@ pub trait PublicClientApplication {
 // https://rust-lang.github.io/async-book/07_workarounds/06_async_in_traits.html
 // https://github.com/dtolnay/async-trait
 
-/// Silent login https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/login-user.md#silent-login-with-ssosilent
-/// Can use this first to try loging in without interation, if it fails will then need to run the normal login work flow
-/// Note the 'account' (i think authority) must be set for this to run
+// Silent login https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/login-user.md#silent-login-with-ssosilent
+// Can use this first to try loging in without interation, if it fails will then need to run the normal login work flow
+// Note the 'account' (i think authority) must be set for this to run
+// needs a login_hint, sid or account object on the request
 async fn sso_silent(
     client_app: &msal::PublicClientApplication,
     request: AuthorizationUrlRequest,
@@ -219,9 +215,9 @@ async fn sso_silent(
     client_app.sso_silent(request.into()).await.map(Into::into)
 }
 
-/// Called by both popup and redirect
-/// https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/acquire-token.md
-/// Call this first, then if it fails will will need to call the interative methods
+// Called by both popup and redirect
+// https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/acquire-token.md
+// Call this first, then if it fails will will need to call the interative methods
 async fn acquire_token_silent(
     client_app: &msal::PublicClientApplication,
     request: SilentRequest,
@@ -232,6 +228,7 @@ async fn acquire_token_silent(
         .map(Into::into)
 }
 
+#[derive(Clone)]
 pub struct AccountInfo {
     pub home_account_id: String,
     pub environment: String,

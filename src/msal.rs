@@ -80,6 +80,12 @@ extern "C" {
     #[wasm_bindgen(method, setter, js_name = correlationId)]
     pub fn set_correlation_id(this: &AuthorizationUrlRequest, correlation_id: String);
 
+    #[wasm_bindgen(method, getter, js_name = loginHint)]
+    pub fn login_hint(this: &AuthorizationUrlRequest) -> String;
+
+    #[wasm_bindgen(method, setter, js_name = loginHint)]
+    pub fn set_login_hint(this: &AuthorizationUrlRequest, login_hint: String);
+
     // file://./..//node_modules/@azure/msal-common/dist/src/account/AccountInfo.d.ts
     pub type AccountInfo;
 

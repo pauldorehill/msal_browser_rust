@@ -2,7 +2,7 @@ use crate::{msal, AccountInfo};
 use msal::{JsArrayString, JsMirror};
 use std::{collections::HashMap, fmt::Display};
 
-enum ResponseMode {
+pub enum ResponseMode {
     Query,
     Fragment,
     FormPost,
@@ -17,7 +17,9 @@ impl Display for ResponseMode {
         }
     }
 }
-struct BaseAuthRequest {
+
+#[derive(Clone)]
+pub struct BaseAuthRequest {
     scopes: Vec<String>,
     authority: Option<String>,
     correlation_id: Option<String>,
@@ -89,6 +91,17 @@ pub struct AuthorizationUrlRequest {
     nonce: Option<String>,
 }
 
+impl AuthorizationUrlRequest {
+    /// Can be retrieved from the account object username property or the upn claim in the ID token
+    pub fn set_login_hint(mut self, login_hint: &str) -> Self {
+        match self.login_hint.as_mut() {
+            Some(s) => s.replace_range(.., login_hint),
+            None => self.login_hint = Some(String::from(login_hint)),
+        }
+        self
+    }
+}
+
 impl JsMirror for AuthorizationUrlRequest {
     type JsTarget = msal::AuthorizationUrlRequest;
 }
@@ -105,6 +118,10 @@ impl From<AuthorizationUrlRequest> for msal::AuthorizationUrlRequest {
         request
             .base_request
             .clone_correlation_id(|s| auth_req.set_correlation_id(s));
+        request
+            .login_hint
+            .into_iter()
+            .for_each(|s| auth_req.set_login_hint(s));
         auth_req
     }
 }
@@ -214,13 +231,13 @@ impl From<RedirectRequest> for msal::RedirectRequest {
 
 pub struct SilentRequest {
     base_request: BaseAuthRequest,
-    account: AccountInfo,
+    pub account: AccountInfo,
     force_refresh: Option<bool>,
     redirect_uri: Option<String>,
 }
 
 impl SilentRequest {
-    fn from_account_info(base_request: BaseAuthRequest, account_info: AccountInfo) -> Self {
+    pub fn from_account_info(base_request: BaseAuthRequest, account_info: AccountInfo) -> Self {
         Self {
             base_request,
             account: account_info,
@@ -285,4 +302,14 @@ impl From<EndSessionRequest> for msal::EndSessionRequest {
             .for_each(|v| r.set_account(v));
         r
     }
+}
+
+#[cfg(test)]
+mod tests_in_browser {
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    use super::*;
+    use wasm_bindgen_test::*;
+
+    // TODO: test all of these on js creation as currently not working? Silent
 }

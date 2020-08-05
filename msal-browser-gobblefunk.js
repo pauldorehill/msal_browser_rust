@@ -23,6 +23,20 @@ export class AuthorizationUrlRequest {
     constructor(scopes) {
         this.scopes = scopes;
     }
+    authority;
+    correlationId;
+    redirectUri;
+    extraScopesToConsent;
+    responseMode;
+    codeChallenge;
+    codeChallengeMethod;
+    state;
+    prompt;
+    loginHint;
+    domainHint;
+    extraQueryParameters;
+    claims;
+    nonce;
 }
 
 /**
