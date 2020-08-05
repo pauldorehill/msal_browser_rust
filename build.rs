@@ -1,4 +1,4 @@
-// This simple pulls the msal-browser.js code into the root
+// This simply pulls the msal-browser.js code into the root
 use std::fs;
 use std::io::prelude::*;
 

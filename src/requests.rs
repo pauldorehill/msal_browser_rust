@@ -24,6 +24,20 @@ struct BaseAuthRequest {
 }
 
 impl BaseAuthRequest {
+    pub fn set_authority(&mut self, authority: &str) {
+        match self.authority.as_mut() {
+            Some(a) => a.replace_range(.., authority),
+            None => self.authority = Some(String::from(authority)),
+        }
+    }
+
+    pub fn set_correlation_id(&mut self, correlation_id: &str) {
+        match self.correlation_id.as_mut() {
+            Some(a) => a.replace_range(.., correlation_id),
+            None => self.correlation_id = Some(String::from(correlation_id)),
+        }
+    }
+
     fn clone_authority<F>(&self, cloner: F)
     where
         F: Fn(String),
@@ -85,8 +99,12 @@ impl From<AuthorizationUrlRequest> for msal::AuthorizationUrlRequest {
         let auth_req = msal::AuthorizationUrlRequest::new(
             &JsArrayString::from(request.base_request.scopes.clone()).into(),
         );
-        request.base_request.clone_authority(|s| auth_req.set_authority(s));
-        request.base_request.clone_correlation_id(|s| auth_req.set_correlation_id(s));
+        request
+            .base_request
+            .clone_authority(|s| auth_req.set_authority(s));
+        request
+            .base_request
+            .clone_correlation_id(|s| auth_req.set_correlation_id(s));
         auth_req
     }
 }
@@ -141,15 +159,18 @@ impl From<BaseAuthRequest> for AuthorizationUrlRequest {
     }
 }
 
+#[cfg(feature = "redirect")]
 pub struct RedirectRequest {
     auth_url_req: AuthorizationUrlRequest,
     redirect_start_page: Option<String>,
 }
 
+#[cfg(feature = "redirect")]
 impl JsMirror for RedirectRequest {
     type JsTarget = msal::RedirectRequest;
 }
 
+#[cfg(feature = "redirect")]
 impl RedirectRequest {
     pub fn new(scopes: Vec<String>) -> Self {
         Self {
@@ -159,6 +180,7 @@ impl RedirectRequest {
     }
 }
 
+#[cfg(feature = "redirect")]
 impl From<Vec<&str>> for RedirectRequest {
     fn from(scopes: Vec<&str>) -> Self {
         scopes
@@ -169,8 +191,8 @@ impl From<Vec<&str>> for RedirectRequest {
     }
 }
 
+#[cfg(feature = "redirect")]
 impl From<Vec<String>> for RedirectRequest {
-    // TODO: Add all values
     fn from(scopes: Vec<String>) -> Self {
         Self {
             auth_url_req: scopes.into(),
@@ -179,7 +201,9 @@ impl From<Vec<String>> for RedirectRequest {
     }
 }
 
+#[cfg(feature = "redirect")]
 impl From<RedirectRequest> for msal::RedirectRequest {
+    //TODO: Add in all the values
     fn from(request: RedirectRequest) -> Self {
         let auth_req = msal::RedirectRequest::new(
             &JsArrayString::from(request.auth_url_req.base_request.scopes.clone()).into(),
@@ -195,14 +219,40 @@ pub struct SilentRequest {
     redirect_uri: Option<String>,
 }
 
+impl SilentRequest {
+    fn from_account_info(base_request: BaseAuthRequest, account_info: AccountInfo) -> Self {
+        Self {
+            base_request,
+            account: account_info,
+            force_refresh: None,
+            redirect_uri: None,
+        }
+    }
+}
+
 impl JsMirror for SilentRequest {
     type JsTarget = msal::SilentRequest;
 }
 
 impl From<SilentRequest> for msal::SilentRequest {
-    // TODO: Add all values
     fn from(request: SilentRequest) -> Self {
-        todo!()
+        let r = msal::SilentRequest::new(
+            &JsArrayString::from(request.base_request.scopes.clone()).into(),
+            request.account.into(),
+        );
+        request.base_request.clone_authority(|v| r.set_authority(v));
+        request
+            .base_request
+            .clone_correlation_id(|v| r.set_correlation_id(v));
+        request
+            .force_refresh
+            .into_iter()
+            .for_each(|v| r.set_force_refresh(v));
+        request
+            .redirect_uri
+            .into_iter()
+            .for_each(|v| r.set_redirect_uri(v));
+        r
     }
 }
 
@@ -221,18 +271,18 @@ impl JsMirror for EndSessionRequest {
 impl From<EndSessionRequest> for msal::EndSessionRequest {
     fn from(request: EndSessionRequest) -> Self {
         let r = msal::EndSessionRequest::new();
-        if let Some(account) = request.account {
-            r.set_account(account);
-        }
-        if let Some(post_logout_redirect_uri) = request.post_logout_redirect_uri {
-            r.set_account(post_logout_redirect_uri);
-        }
-        if let Some(authority) = request.authority {
-            r.set_account(authority);
-        }
-        if let Some(correlation_id) = request.correlation_id {
-            r.set_account(correlation_id);
-        }
+        request.account.into_iter().for_each(|v| {
+            r.set_account(v);
+        });
+        request
+            .post_logout_redirect_uri
+            .into_iter()
+            .for_each(|v| r.set_account(v));
+        request.authority.into_iter().for_each(|v| r.set_account(v));
+        request
+            .correlation_id
+            .into_iter()
+            .for_each(|v| r.set_account(v));
         r
     }
 }

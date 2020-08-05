@@ -27,6 +27,7 @@ export class AuthorizationUrlRequest {
 
 /**
  * @param {[string]} scopes
+ * @param {[string]} scopes
  */
 export class RedirectRequest {
     constructor(scopes) {
@@ -64,7 +65,7 @@ export class EndSessionRequest {
 
 /**
  * @param {AccountInfo} account
-* @param {[string]} scopes
+ * @param {[string]} scopes
  */
 export class SilentRequest {
     constructor(scopes, account) {
@@ -73,6 +74,6 @@ export class SilentRequest {
     }
     authority;
     correlationId;
-    force_refresh;
-    redirect_uri;
+    forceRefresh;
+    redirectUri;
 };

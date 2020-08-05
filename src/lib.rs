@@ -3,26 +3,19 @@
 //! interactive login -> acquire access token silent -> acquire access token interactive
 //! logout
 
-// #![allow(dead_code)]
-// When this is turned on all my intellisense dies / cargo check runs without errors?
-// It does also mean when using the crate this must be set
-// #![cfg(target_arch = "wasm32")]
-
-// #![cfg(not(target_arch = "wasm32"))]
-// { compile_error!("Cannot compile this crate for non-wasm32 arch")
-// }
+// Define all the js types in pure rust so that intellisense plays nice and can
+// create a builder pattern
 
 // TODO: Since working with WASM, use String over &str?
 // TODO: Maybe split to features: Popup and Redirect? Since should use one or the other
 // TODO: Build script that runs tests, and copies current msal-browser files to root?
+// TODO: Test for each type going WASM -> JS -> WASM; then JSON?
 mod msal;
 
 #[cfg(feature = "popup")]
 pub mod popup_app;
-
 #[cfg(feature = "redirect")]
 pub mod redirect_app;
-
 pub mod requests;
 
 use js_sys::{Array, Date};
@@ -30,6 +23,107 @@ use msal::{JsArrayString, JsMirror};
 use requests::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
+
+pub struct BrowserAuthOptions {
+    client_id: String,
+    authority: Option<String>,
+    redirect_uri: Option<String>,
+}
+
+impl JsMirror for BrowserAuthOptions {
+    type JsTarget = msal::BrowserAuthOptions;
+}
+
+impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
+    fn from(auth_options: BrowserAuthOptions) -> Self {
+        let auth = msal::BrowserAuthOptions::new(&auth_options.client_id);
+        auth_options.authority.iter().for_each(|a| {
+            auth.set_authority(&a);
+        });
+        auth_options.redirect_uri.iter().for_each(|ru| {
+            auth.set_redirect_uri(ru);
+        });
+        auth
+    }
+}
+
+impl BrowserAuthOptions {
+    // Small strings so don't worry about 'leaked' memory on replace
+    fn ref_set_authority(&mut self, authority: &str) {
+        match self.authority.as_mut() {
+            Some(s) => s.replace_range(.., authority),
+            None => self.authority = Some(authority.to_string()),
+        }
+    }
+
+    pub fn set_authority(mut self, authority: &str) -> Self {
+        self.ref_set_authority(authority);
+        self
+    }
+
+    fn ref_set_redirect_uri(&mut self, redirect_uri: &str) {
+        match self.redirect_uri.as_mut() {
+            Some(s) => s.replace_range(.., redirect_uri),
+            None => self.redirect_uri = Some(redirect_uri.to_string()),
+        }
+    }
+
+    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
+        self.ref_set_redirect_uri(redirect_uri);
+        self
+    }
+}
+
+impl From<&str> for BrowserAuthOptions {
+    fn from(client_id: &str) -> Self {
+        Self {
+            client_id: client_id.to_string(),
+            authority: None,
+            redirect_uri: None,
+        }
+    }
+}
+
+pub struct Configuration {
+    auth: BrowserAuthOptions,
+}
+
+impl JsMirror for Configuration {
+    type JsTarget = msal::Configuration;
+}
+
+impl From<Configuration> for msal::Configuration {
+    fn from(config: Configuration) -> Self {
+        msal::Configuration::new(&config.auth.into())
+    }
+}
+
+impl Configuration {
+    pub fn set_authority(mut self, authority: &str) -> Self {
+        self.auth.ref_set_authority(authority);
+        self
+    }
+
+    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
+        self.auth.ref_set_redirect_uri(redirect_uri);
+        self
+    }
+}
+
+impl From<BrowserAuthOptions> for Configuration {
+    fn from(browser_auth_options: BrowserAuthOptions) -> Self {
+        Self {
+            auth: browser_auth_options,
+        }
+    }
+}
+
+impl From<&str> for Configuration {
+    fn from(client_id: &str) -> Self {
+        let b: BrowserAuthOptions = client_id.into();
+        b.into()
+    }
+}
 
 // TODO: Date + work out what is going wrong passing token claims
 // Check these are in UTC and do something better? Could just keep as Js Date and provide nicer methods with intellisense?
@@ -71,116 +165,6 @@ impl From<msal::AuthenticationResult> for AuthenticationResult {
 impl From<JsValue> for AuthenticationResult {
     fn from(value: JsValue) -> Self {
         value.unchecked_into::<msal::AuthenticationResult>().into()
-    }
-}
-// Define these in pure rust so that intellisense plays nice and can
-// create a builder pattern
-
-pub struct BrowserAuthOptions {
-    client_id: String,
-    authority: Option<String>,
-    redirect_uri: Option<String>,
-}
-
-impl JsMirror for BrowserAuthOptions {
-    type JsTarget = msal::BrowserAuthOptions;
-}
-
-impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
-    fn from(auth_options: BrowserAuthOptions) -> Self {
-        let auth = msal::BrowserAuthOptions::new(&auth_options.client_id);
-        auth_options.authority.iter().for_each(|a| {
-            auth.set_authority(&a);
-        });
-        auth_options.redirect_uri.iter().for_each(|ru| {
-            auth.set_redirect_uri(ru);
-        });
-        auth
-    }
-}
-
-impl BrowserAuthOptions {
-    pub fn new(client_id: &str) -> Self {
-        Self {
-            client_id: client_id.to_string(),
-            authority: None,
-            redirect_uri: None,
-        }
-    }
-
-    // Small strings so don't worry about 'leaked' memory on replace
-    fn ref_set_authority(&mut self, authority: &str) {
-        match self.authority.as_mut() {
-            Some(s) => s.replace_range(.., authority),
-            None => self.authority = Some(authority.to_string()),
-        }
-    }
-
-    pub fn set_authority(mut self, authority: &str) -> Self {
-        self.ref_set_authority(authority);
-        self
-    }
-
-    fn ref_set_redirect_uri(&mut self, redirect_uri: &str) {
-        match self.redirect_uri.as_mut() {
-            Some(s) => s.replace_range(.., redirect_uri),
-            None => self.redirect_uri = Some(redirect_uri.to_string()),
-        }
-    }
-
-    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
-        self.ref_set_redirect_uri(redirect_uri);
-        self
-    }
-}
-
-impl From<&str> for BrowserAuthOptions {
-    fn from(client_id: &str) -> Self {
-        Self::new(client_id)
-    }
-}
-
-pub struct Configuration {
-    auth: BrowserAuthOptions,
-}
-
-impl JsMirror for Configuration {
-    type JsTarget = msal::Configuration;
-}
-
-impl From<Configuration> for msal::Configuration {
-    fn from(config: Configuration) -> Self {
-        msal::Configuration::new(&config.auth.into())
-    }
-}
-
-impl Configuration {
-    pub fn new(browser_auth_options: BrowserAuthOptions) -> Self {
-        Self {
-            auth: browser_auth_options,
-        }
-    }
-
-    pub fn set_authority(mut self, authority: &str) -> Self {
-        self.auth.ref_set_authority(authority);
-        self
-    }
-
-    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
-        self.auth.ref_set_redirect_uri(redirect_uri);
-        self
-    }
-}
-
-impl From<BrowserAuthOptions> for Configuration {
-    fn from(browser_auth_options: BrowserAuthOptions) -> Self {
-        Self::new(browser_auth_options)
-    }
-}
-
-impl From<&str> for Configuration {
-    fn from(client_id: &str) -> Self {
-        Self::new(client_id.into())
     }
 }
 
@@ -255,6 +239,10 @@ pub struct AccountInfo {
     pub username: String,
 }
 
+impl JsMirror for AccountInfo {
+    type JsTarget = msal::AccountInfo;
+}
+
 impl From<msal::AccountInfo> for AccountInfo {
     fn from(account_info: msal::AccountInfo) -> Self {
         Self {
@@ -263,6 +251,17 @@ impl From<msal::AccountInfo> for AccountInfo {
             tenant_id: account_info.tenant_id(),
             username: account_info.username(),
         }
+    }
+}
+
+impl From<AccountInfo> for msal::AccountInfo {
+    fn from(account_info: AccountInfo) -> Self {
+        msal::AccountInfo::new(
+            account_info.home_account_id,
+            account_info.environment,
+            account_info.tenant_id,
+            account_info.username,
+        )
     }
 }
 
@@ -276,9 +275,12 @@ impl AccountInfo {
 }
 
 pub mod prelude {
-    pub use crate::{AccountInfo, AuthenticationResult, BrowserAuthOptions, Configuration, PublicClientApplication};
     pub use crate::popup_app::PopupApp;
     pub use crate::requests::*;
+    pub use crate::{
+        AccountInfo, AuthenticationResult, BrowserAuthOptions, Configuration,
+        PublicClientApplication,
+    };
 }
 
 #[cfg(test)]
@@ -286,8 +288,6 @@ mod tests_in_browser {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use crate::*;
-    use js_sys::Map;
-    use msal::JsHashMapStringString;
     use wasm_bindgen_test::*;
 
     fn home_account_id(i: usize) -> String {
@@ -329,17 +329,6 @@ mod tests_in_browser {
             assert_eq!(tenant_id(i), accounts[i].tenant_id);
             assert_eq!(username(i), accounts[i].username);
         }
-    }
-
-    // This is here since i discovered that Key and Value are strangely switched on a Map.foreach in Js land
-    #[wasm_bindgen_test]
-    fn make_hashmap_from_map() {
-        let kv = ("claim key".to_string(), "claim value".to_string());
-        let js_map = Map::new();
-        js_map.set(&kv.0.into(), &kv.1.into());
-        let js_hash_map = JsHashMapStringString::from(("claim key", "claim value"));
-        let js_map_wasm: JsHashMapStringString = JsHashMapStringString::from(js_map);
-        assert_eq!(js_map_wasm, js_hash_map)
     }
 
     #[wasm_bindgen_test]

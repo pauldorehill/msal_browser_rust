@@ -29,6 +29,3 @@ wasm-bindgen-test = "0.3.17"
 [profile.release]
 lto = true
 opt-level = "s"
-
-[package.metadata.docs.rs]
-default-target = "wasm32"

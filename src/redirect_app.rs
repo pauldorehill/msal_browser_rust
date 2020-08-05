@@ -95,8 +95,7 @@ mod test {
 
     use super::*;
     use wasm_bindgen_test::*;
-
-
+    
     const CLIENT_ID: &str = "MY_CLIENT_ID";
     const AUTHORITY: &str = "MY_AUTHORITY";
     const REDIRECT_URI: &str = "MY_REDIRECT_URI";

@@ -75,7 +75,7 @@ impl<'a> From<Configuration> for PopupApp {
 
 impl<'a> From<BrowserAuthOptions> for PopupApp {
     fn from(browser_auth_options: BrowserAuthOptions) -> Self {
-        Configuration::new(browser_auth_options).into()
+        Configuration::from(browser_auth_options).into()
     }
 }
 
@@ -92,10 +92,10 @@ mod tests_in_browser {
 
     #[wasm_bindgen_test]
     fn build_pub_client_full() {
-        let b = BrowserAuthOptions::new(CLIENT_ID)
+        let b = BrowserAuthOptions::from(CLIENT_ID)
             .set_authority(AUTHORITY)
             .set_redirect_uri(REDIRECT_URI);
-        let c = Configuration::new(b);
+        let c = Configuration::from(b);
         let client_app = PopupApp::new(c);
         assert_eq!(client_app.client_id(), CLIENT_ID);
         assert_eq!(client_app.authority(), AUTHORITY);

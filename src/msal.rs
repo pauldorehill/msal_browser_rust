@@ -24,7 +24,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 pub trait JsMirror: std::marker::Sized {
-    type JsTarget: From<Self>;
+    // TODO: Toggle this on
+    type JsTarget: From<Self>;// + Into<Self>;
 }
 
 #[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
@@ -143,6 +144,18 @@ extern "C" {
 
     #[wasm_bindgen(constructor)]
     pub fn new(scopes: &Array, account: AccountInfo) -> SilentRequest;
+
+    #[wasm_bindgen(method, setter)]
+    pub fn set_authority(request: &SilentRequest, authority: String);
+
+    #[wasm_bindgen(method, setter, js_name = correlationId)]
+    pub fn set_correlation_id(request: &SilentRequest, correlation_id: String);
+
+    #[wasm_bindgen(method, setter, js_name = forceRefresh)]
+    pub fn set_force_refresh(request: &SilentRequest, force_refresh: bool);
+
+    #[wasm_bindgen(method, setter, js_name = redirectUri)]
+    pub fn set_redirect_uri(request: &SilentRequest, redirectUri: String);
 
 }
 
@@ -308,12 +321,11 @@ impl From<Vec<String>> for AuthorizationUrlRequest {
 
 // TODO: Should i be using unchecked? I know the types, would likely
 // just unwrap anyway... but could pass out more usefull error?
-// Do i need both generics?
 // Using newtype pattern to allow use of traits
 
-fn array_to_vec<JsT, FinalT>(array: Array) -> Vec<FinalT>
+fn array_to_vec<JsT, T>(array: Array) -> Vec<T>
 where
-    JsT: JsCast + Into<FinalT>,
+    JsT: JsCast + Into<T>,
 {
     array
         .iter()
@@ -400,5 +412,24 @@ impl From<(&str, &str)> for JsHashMapStringString {
         let mut hm = HashMap::new();
         hm.insert(kv.0.to_string(), kv.1.to_string());
         Self(hm)
+    }
+}
+
+#[cfg(test)]
+mod tests_in_browser {
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    use super::*;
+    use wasm_bindgen_test::*;
+    
+    // This is here since i discovered that Key and Value are strangely switched on a Map.foreach in Js land
+    #[wasm_bindgen_test]
+    fn make_hashmap_from_map() {
+        let kv = ("claim key".to_string(), "claim value".to_string());
+        let js_map = Map::new();
+        js_map.set(&kv.0.into(), &kv.1.into());
+        let js_hash_map = JsHashMapStringString::from(("claim key", "claim value"));
+        let js_map_wasm: JsHashMapStringString = JsHashMapStringString::from(js_map);
+        assert_eq!(js_map_wasm, js_hash_map)
     }
 }
