@@ -23,6 +23,10 @@ use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+pub trait JsMirror: std::marker::Sized {
+    type JsTarget: From<Self>;
+}
+
 #[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
 extern "C" {
 
@@ -133,10 +137,18 @@ extern "C" {
 
     #[wasm_bindgen(constructor)]
     pub fn new(scopes: &Array) -> RedirectRequest;
+
+    // file://./..//node_modules/@azure/msal-browser/dist/src/request/SilentRequest.d.ts
+    pub type SilentRequest;
+
+    #[wasm_bindgen(constructor)]
+    pub fn new(scopes: &Array, account: AccountInfo) -> SilentRequest;
+
 }
 
 // file://./../node_modules/@azure/msal-browser/dist/index.es.js
-#[wasm_bindgen(module = "/node_modules/@azure/msal-browser/dist/index.es.js")]
+// Copied locally in a build script
+#[wasm_bindgen(module = "/msal-browser.js")]
 extern "C" {
 
     //file://./../node_modules/@azure/msal-browser/dist/src/app/PublicClientApplication.d.ts
@@ -185,7 +197,7 @@ extern "C" {
     #[wasm_bindgen(method, catch, js_name = acquireTokenSilent, catch)]
     pub async fn acquire_token_silent(
         this: &PublicClientApplication,
-        request: AuthorizationUrlRequest,
+        request: SilentRequest,
     ) -> Result<JsValue, JsValue>;
 
     // In the ts file this is marked as a Promise<void> and should not be awaited since navigating away

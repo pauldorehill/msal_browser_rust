@@ -2,230 +2,35 @@
 //! Build Client App -> sso login ->
 //! interactive login -> acquire access token silent -> acquire access token interactive
 //! logout
-//! Since working with WASM, use String over &str?
 
-#![allow(dead_code)]
-// When this is turned on all my intellisense dies ;-(
-#![cfg(target_arch = "wasm32")]
+// #![allow(dead_code)]
+// When this is turned on all my intellisense dies / cargo check runs without errors?
+// It does also mean when using the crate this must be set
+// #![cfg(target_arch = "wasm32")]
 
+// #![cfg(not(target_arch = "wasm32"))]
+// { compile_error!("Cannot compile this crate for non-wasm32 arch")
+// }
+
+// TODO: Since working with WASM, use String over &str?
+// TODO: Maybe split to features: Popup and Redirect? Since should use one or the other
+// TODO: Build script that runs tests, and copies current msal-browser files to root?
 mod msal;
 
+#[cfg(feature = "popup")]
+pub mod popup_app;
+
+#[cfg(feature = "redirect")]
+pub mod redirect_app;
+
+pub mod requests;
+
 use js_sys::{Array, Date};
-use msal::*;
-use std::{collections::HashMap, fmt::Display};
+use msal::{JsArrayString, JsMirror};
+use requests::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 
-struct BaseAuthRequest {
-    scopes: Vec<String>,
-    authority: Option<String>,
-    correlation_id: Option<String>,
-}
-
-impl From<Vec<String>> for BaseAuthRequest {
-    fn from(scopes: Vec<String>) -> Self {
-        Self {
-            scopes,
-            authority: None,
-            correlation_id: None,
-        }
-    }
-}
-
-impl From<Vec<&str>> for BaseAuthRequest {
-    fn from(scopes: Vec<&str>) -> Self {
-        scopes
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<String>>()
-            .into()
-    }
-}
-
-enum ResponseMode {
-    Query,
-    Fragment,
-    FormPost,
-}
-
-impl Display for ResponseMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            ResponseMode::Query => write!(f, "query"),
-            ResponseMode::Fragment => write!(f, "fragment"),
-            ResponseMode::FormPost => write!(f, "form_post"),
-        }
-    }
-}
-
-pub struct AuthorizationUrlRequest {
-    base_request: BaseAuthRequest,
-    redirect_uri: Option<String>,
-    extra_scopes_to_consent: Option<Vec<String>>,
-    response_mode: Option<ResponseMode>,
-    code_challenge: Option<String>,
-    code_challenge_method: Option<String>,
-    state: Option<String>,
-    prompt: Option<String>,
-    login_hint: Option<String>,
-    domain_hint: Option<String>,
-    extra_query_parameters: Option<HashMap<String, String>>,
-    claims: Option<String>,
-    nonce: Option<String>,
-}
-
-impl AuthorizationUrlRequest {
-    //TODO: Complete build steps
-    fn build(&self) -> msal::AuthorizationUrlRequest {
-        let auth_req = msal::AuthorizationUrlRequest::new(
-            &JsArrayString::from(self.base_request.scopes.clone()).into(),
-        );
-        if let Some(authority) = &self.base_request.authority {
-            auth_req.set_authority(authority.clone());
-        }
-        if let Some(correlation_id) = &self.base_request.correlation_id {
-            auth_req.set_correlation_id(correlation_id.clone());
-        }
-        auth_req
-    }
-}
-
-impl From<AuthorizationUrlRequest> for msal::AuthorizationUrlRequest {
-    fn from(request: AuthorizationUrlRequest) -> Self {
-        request.build()
-    }
-}
-
-impl From<Vec<&str>> for AuthorizationUrlRequest {
-    fn from(scopes: Vec<&str>) -> Self {
-        scopes
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<String>>()
-            .into()
-    }
-}
-
-impl From<Vec<String>> for AuthorizationUrlRequest {
-    fn from(scopes: Vec<String>) -> Self {
-        Self {
-            base_request: BaseAuthRequest::from(scopes),
-            redirect_uri: None,
-            extra_scopes_to_consent: None,
-            response_mode: None,
-            code_challenge: None,
-            code_challenge_method: None,
-            state: None,
-            prompt: None,
-            login_hint: None,
-            domain_hint: None,
-            extra_query_parameters: None,
-            claims: None,
-            nonce: None,
-        }
-    }
-}
-
-impl From<BaseAuthRequest> for AuthorizationUrlRequest {
-    fn from(base_request: BaseAuthRequest) -> Self {
-        Self {
-            base_request,
-            redirect_uri: None,
-            extra_scopes_to_consent: None,
-            response_mode: None,
-            code_challenge: None,
-            code_challenge_method: None,
-            state: None,
-            prompt: None,
-            login_hint: None,
-            domain_hint: None,
-            extra_query_parameters: None,
-            claims: None,
-            nonce: None,
-        }
-    }
-}
-
-pub struct RedirectRequest {
-    auth_url_req: AuthorizationUrlRequest,
-    redirect_start_page: Option<String>,
-}
-
-impl RedirectRequest {
-    pub fn new(scopes: Vec<String>) -> Self {
-        Self {
-            auth_url_req: AuthorizationUrlRequest::from(scopes),
-            redirect_start_page: None,
-        }
-    }
-    // TODO: Add all values
-    fn build(&self) -> msal::RedirectRequest {
-        let auth_req = msal::RedirectRequest::new(
-            &JsArrayString::from(self.auth_url_req.base_request.scopes.clone()).into(),
-        );
-        auth_req
-    }
-}
-
-impl From<Vec<&str>> for RedirectRequest {
-    fn from(scopes: Vec<&str>) -> Self {
-        scopes
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<String>>()
-            .into()
-    }
-}
-
-impl From<Vec<String>> for RedirectRequest {
-    fn from(scopes: Vec<String>) -> Self {
-        Self {
-            auth_url_req: scopes.into(),
-            redirect_start_page: None,
-        }
-    }
-}
-
-impl From<RedirectRequest> for msal::RedirectRequest {
-    fn from(request: RedirectRequest) -> Self {
-        request.build()
-    }
-}
-
-// Adds acccount and force refresh to BaseAuthRequest
-pub struct SilentRequest {
-    base_request: BaseAuthRequest,
-    account: AccountInfo,
-    force_refresh: Option<bool>,
-    redirect_uri: Option<String>,
-}
-
-#[derive(Default)]
-pub struct EndSessionRequest {
-    account: Option<String>,
-    post_logout_redirect_uri: Option<String>,
-    authority: Option<String>,
-    correlation_id: Option<String>,
-}
-
-impl From<EndSessionRequest> for msal::EndSessionRequest {
-    fn from(request: EndSessionRequest) -> Self {
-        let r = msal::EndSessionRequest::new();
-        if let Some(account) = request.account {
-            r.set_account(account);
-        }
-        if let Some(post_logout_redirect_uri) = request.post_logout_redirect_uri {
-            r.set_account(post_logout_redirect_uri);
-        }
-        if let Some(authority) = request.authority {
-            r.set_account(authority);
-        }
-        if let Some(correlation_id) = request.correlation_id {
-            r.set_account(correlation_id);
-        }
-        r
-    }
-}
 // TODO: Date + work out what is going wrong passing token claims
 // Check these are in UTC and do something better? Could just keep as Js Date and provide nicer methods with intellisense?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
@@ -238,8 +43,8 @@ pub struct AuthenticationResult {
     // pub id_token_claims: HashMap<String, String>,
     pub access_token: String,
     pub from_cache: bool,
-    pub(crate) expires_on: Date,
-    pub(crate) ext_expires_on: Option<Date>,
+    pub expires_on: Date,
+    pub ext_expires_on: Option<Date>,
     pub state: Option<String>,
     pub family_id: Option<String>,
 }
@@ -277,6 +82,23 @@ pub struct BrowserAuthOptions {
     redirect_uri: Option<String>,
 }
 
+impl JsMirror for BrowserAuthOptions {
+    type JsTarget = msal::BrowserAuthOptions;
+}
+
+impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
+    fn from(auth_options: BrowserAuthOptions) -> Self {
+        let auth = msal::BrowserAuthOptions::new(&auth_options.client_id);
+        auth_options.authority.iter().for_each(|a| {
+            auth.set_authority(&a);
+        });
+        auth_options.redirect_uri.iter().for_each(|ru| {
+            auth.set_redirect_uri(ru);
+        });
+        auth
+    }
+}
+
 impl BrowserAuthOptions {
     pub fn new(client_id: &str) -> Self {
         Self {
@@ -310,17 +132,6 @@ impl BrowserAuthOptions {
         self.ref_set_redirect_uri(redirect_uri);
         self
     }
-
-    fn build(&self) -> msal::BrowserAuthOptions {
-        let auth = msal::BrowserAuthOptions::new(&self.client_id);
-        self.authority.iter().for_each(|a| {
-            auth.set_authority(&a);
-        });
-        self.redirect_uri.iter().for_each(|ru| {
-            auth.set_redirect_uri(ru);
-        });
-        auth
-    }
 }
 
 impl From<&str> for BrowserAuthOptions {
@@ -331,6 +142,16 @@ impl From<&str> for BrowserAuthOptions {
 
 pub struct Configuration {
     auth: BrowserAuthOptions,
+}
+
+impl JsMirror for Configuration {
+    type JsTarget = msal::Configuration;
+}
+
+impl From<Configuration> for msal::Configuration {
+    fn from(config: Configuration) -> Self {
+        msal::Configuration::new(&config.auth.into())
+    }
 }
 
 impl Configuration {
@@ -348,10 +169,6 @@ impl Configuration {
     pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
         self.auth.ref_set_redirect_uri(redirect_uri);
         self
-    }
-
-    fn build(self) -> msal::Configuration {
-        msal::Configuration::new(&self.auth.build())
     }
 }
 
@@ -371,7 +188,6 @@ impl From<&str> for Configuration {
 /// there are two apis: popup and redirect. Redirect requires that you must call `handleRedirectPromise()`
 /// because of this I will split into two and also crate a trait
 
-/// : private::Sealed? - doesn't compile
 pub trait PublicClientApplication {
     fn auth(&self) -> &msal::PublicClientApplication;
 
@@ -407,10 +223,11 @@ pub trait PublicClientApplication {
 
 // Can't put these on the trait since `async` is not allowed in traits
 // https://rust-lang.github.io/async-book/07_workarounds/06_async_in_traits.html
+// https://github.com/dtolnay/async-trait
 
 /// Silent login https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/login-user.md#silent-login-with-ssosilent
-/// Can use this first to try loging in without interation, if it fails will then need
-/// run the normal login work flow
+/// Can use this first to try loging in without interation, if it fails will then need to run the normal login work flow
+/// Note the 'account' (i think authority) must be set for this to run
 async fn sso_silent(
     client_app: &msal::PublicClientApplication,
     request: AuthorizationUrlRequest,
@@ -423,159 +240,12 @@ async fn sso_silent(
 /// Call this first, then if it fails will will need to call the interative methods
 async fn acquire_token_silent(
     client_app: &msal::PublicClientApplication,
-    request: AuthorizationUrlRequest,
+    request: SilentRequest,
 ) -> Result<AuthenticationResult, JsValue> {
     client_app
         .acquire_token_silent(request.into())
         .await
         .map(Into::into)
-}
-
-pub struct RedirectApp<FSuccess, FErr>
-where
-    FSuccess: Fn(AuthenticationResult),
-    FErr: Fn(JsValue),
-{
-    auth: msal::PublicClientApplication,
-    on_redirect_success: FSuccess,
-    on_redirect_error: FErr,
-}
-
-impl<FSuccess, FErr> PublicClientApplication for RedirectApp<FSuccess, FErr>
-where
-    FSuccess: Fn(AuthenticationResult),
-    FErr: Fn(JsValue),
-{
-    fn auth(&self) -> &msal::PublicClientApplication {
-        &self.auth
-    }
-}
-
-impl<FSuccess, FErr> RedirectApp<FSuccess, FErr>
-where
-    FSuccess: Fn(AuthenticationResult),
-    FErr: Fn(JsValue),
-{
-    pub fn new(
-        configuration: Configuration,
-        on_redirect_success: FSuccess,
-        on_redirect_error: FErr,
-    ) -> Self {
-        let auth = msal::PublicClientApplication::new(configuration.build());
-        Self {
-            auth,
-            on_redirect_success,
-            on_redirect_error,
-        }
-    }
-
-    pub async fn login_redirect(&self) {
-        self.login_redirect_with_scopes(vec![]).await
-    }
-
-    pub async fn login_redirect_with_scopes(&self, scopes: Vec<String>) {
-        // Will always be ok unless the msal library errors, in which case
-        // should throw anyway?
-        let jsv = self.auth.handle_redirect_promise().await.unwrap();
-        // AuthenticationResult will be undefined / null if not a redirect
-        let auth_res = jsv.unchecked_into::<msal::AuthenticationResult>();
-        if auth_res.is_undefined() || auth_res.is_null() {
-            self.auth.login_redirect(scopes.into())
-        } else {
-            (self.on_redirect_success)(auth_res.into())
-        }
-    }
-
-    pub async fn acquire_token_redirect(&self, request: RedirectRequest) {
-        self.auth.acquire_token_redirect(request.into())
-    }
-
-    pub async fn sso_silent(
-        &self,
-        request: AuthorizationUrlRequest,
-    ) -> Result<AuthenticationResult, JsValue> {
-        sso_silent(&self.auth, request).await
-    }
-
-    pub async fn acquire_token_silent(
-        &self,
-        request: AuthorizationUrlRequest,
-    ) -> Result<AuthenticationResult, JsValue> {
-        acquire_token_silent(&self.auth, request).await
-    }
-}
-pub struct PopupApp {
-    auth: msal::PublicClientApplication,
-}
-
-impl PublicClientApplication for PopupApp {
-    fn auth(&self) -> &msal::PublicClientApplication {
-        &self.auth
-    }
-}
-
-impl PopupApp {
-    pub fn new(configuration: Configuration) -> Self {
-        Self {
-            auth: msal::PublicClientApplication::new(configuration.build()),
-        }
-    }
-
-    pub async fn login_popup(&self) -> Result<AuthenticationResult, JsValue> {
-        self.auth
-            .login_popup(Self::empty_request())
-            .await
-            .map(Into::into)
-    }
-
-    pub async fn login_popup_with_scopes(
-        &self,
-        scopes: Vec<String>,
-    ) -> Result<AuthenticationResult, JsValue> {
-        self.auth.login_popup(scopes.into()).await.map(Into::into)
-    }
-
-    pub async fn sso_silent(
-        &self,
-        request: AuthorizationUrlRequest,
-    ) -> Result<AuthenticationResult, JsValue> {
-        sso_silent(&self.auth, request).await
-    }
-
-    pub async fn acquire_token_silent(
-        &self,
-        request: AuthorizationUrlRequest,
-    ) -> Result<AuthenticationResult, JsValue> {
-        acquire_token_silent(&self.auth, request).await
-    }
-
-    pub async fn acquire_token_popup(
-        &self,
-        request: AuthorizationUrlRequest,
-    ) -> Result<AuthenticationResult, JsValue> {
-        self.auth
-            .acquire_token_popup(request.into())
-            .await
-            .map(Into::into)
-    }
-}
-
-impl<'a> From<&'a str> for PopupApp {
-    fn from(client_id: &'a str) -> Self {
-        Self::new(client_id.into())
-    }
-}
-
-impl<'a> From<Configuration> for PopupApp {
-    fn from(configuration: Configuration) -> Self {
-        PopupApp::new(configuration)
-    }
-}
-
-impl<'a> From<BrowserAuthOptions> for PopupApp {
-    fn from(browser_auth_options: BrowserAuthOptions) -> Self {
-        Configuration::new(browser_auth_options).into()
-    }
 }
 
 pub struct AccountInfo {
@@ -605,64 +275,20 @@ impl AccountInfo {
     }
 }
 
+pub mod prelude {
+    pub use crate::{AccountInfo, AuthenticationResult, BrowserAuthOptions, Configuration, PublicClientApplication};
+    pub use crate::popup_app::PopupApp;
+    pub use crate::requests::*;
+}
+
 #[cfg(test)]
 mod tests_in_browser {
+    wasm_bindgen_test_configure!(run_in_browser);
 
     use crate::*;
     use js_sys::Map;
+    use msal::JsHashMapStringString;
     use wasm_bindgen_test::*;
-
-    wasm_bindgen_test_configure!(run_in_browser);
-
-    const CLIENT_ID: &str = "MY_CLIENT_ID";
-    const AUTHORITY: &str = "MY_AUTHORITY";
-    const REDIRECT_URI: &str = "MY_REDIRECT_URI";
-
-    // const CLIENT_ID: &str = "3fba556e-5d4a-48e3-8e1a-fd57c12cb82e";
-    // const AUTHORITY: &str = "https://login.windows-ppe.net/common/";
-
-    #[wasm_bindgen_test]
-    fn build_pub_client_full() {
-        let b = BrowserAuthOptions::new(CLIENT_ID)
-            .set_authority(AUTHORITY)
-            .set_redirect_uri(REDIRECT_URI);
-        let c = Configuration::new(b);
-        let client_app = PopupApp::new(c);
-        assert_eq!(client_app.client_id(), CLIENT_ID);
-        assert_eq!(client_app.authority(), AUTHORITY);
-        assert_eq!(client_app.redirect_uri(), REDIRECT_URI);
-    }
-
-    #[wasm_bindgen_test]
-    fn build_pub_client_from_config() {
-        let config = Configuration::from(CLIENT_ID).set_authority(AUTHORITY);
-        let client_app = PopupApp::from(config);
-        assert_eq!(client_app.client_id(), CLIENT_ID);
-    }
-
-    #[wasm_bindgen_test]
-    fn build_pub_client_from_string() {
-        let client_app = PopupApp::from(CLIENT_ID);
-        assert_eq!(client_app.client_id(), CLIENT_ID);
-    }
-
-    // How to correcly test these? Since require user input...
-    // supress the warning for now
-    #[allow(unused_must_use)]
-    #[wasm_bindgen_test]
-    async fn login_popup() {
-        let config = Configuration::from(CLIENT_ID).set_authority(AUTHORITY);
-        let client_app = PopupApp::from(config);
-        client_app.login_popup();
-    }
-
-    #[allow(unused_must_use)]
-    #[wasm_bindgen_test]
-    fn login_redirect() {
-        let config = Configuration::from(CLIENT_ID).set_authority(AUTHORITY);
-        let client_app = RedirectApp::new(config, |_| (), |_| ());
-        client_app.login_redirect();
-    }
 
     fn home_account_id(i: usize) -> String {
         format!("home_account_id_{}", i)
@@ -716,7 +342,7 @@ mod tests_in_browser {
         assert_eq!(js_map_wasm, js_hash_map)
     }
 
-    // #[wasm_bindgen_test]
+    #[wasm_bindgen_test]
     fn convert_authentication_result() {
         let unique_id = "unique_id".to_string();
         let tenant_id = "tenant_id".to_string();

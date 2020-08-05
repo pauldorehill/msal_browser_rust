@@ -61,3 +61,18 @@ export class EndSessionRequest {
     authority;
     correlationId;
 };
+
+/**
+ * @param {AccountInfo} account
+* @param {[string]} scopes
+ */
+export class SilentRequest {
+    constructor(scopes, account) {
+        scopes = scopes;
+        account = account;
+    }
+    authority;
+    correlationId;
+    force_refresh;
+    redirect_uri;
+};
