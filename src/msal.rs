@@ -169,8 +169,7 @@ extern "C" {
 }
 
 // file://./../node_modules/@azure/msal-browser/dist/index.es.js
-// Copied locally in a build script
-#[wasm_bindgen(module = "/msal-browser.js")]
+#[wasm_bindgen(module = "/node_modules/@azure/msal-browser/dist/index.es.js")]
 extern "C" {
 
     //file://./../node_modules/@azure/msal-browser/dist/src/app/PublicClientApplication.d.ts
