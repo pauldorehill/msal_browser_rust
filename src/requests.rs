@@ -26,18 +26,20 @@ pub struct BaseAuthRequest {
 }
 
 impl BaseAuthRequest {
-    pub fn set_authority(&mut self, authority: &str) {
+    pub fn set_authority(mut self, authority: &str) -> Self {
         match self.authority.as_mut() {
             Some(a) => a.replace_range(.., authority),
             None => self.authority = Some(String::from(authority)),
         }
+        self
     }
 
-    pub fn set_correlation_id(&mut self, correlation_id: &str) {
+    pub fn set_correlation_id(mut self, correlation_id: &str) -> Self {
         match self.correlation_id.as_mut() {
             Some(a) => a.replace_range(.., correlation_id),
             None => self.correlation_id = Some(String::from(correlation_id)),
         }
+        self
     }
 
     fn clone_authority<F>(&self, cloner: F)
@@ -75,6 +77,11 @@ impl From<Vec<&str>> for BaseAuthRequest {
     }
 }
 
+impl From<&str> for BaseAuthRequest {
+    fn from(scope: &str) -> Self {
+        vec![scope.to_string()].into()
+    }
+}
 pub struct AuthorizationUrlRequest {
     base_request: BaseAuthRequest,
     redirect_uri: Option<String>,
@@ -229,6 +236,7 @@ impl From<RedirectRequest> for msal::RedirectRequest {
     }
 }
 
+#[derive(Clone)]
 pub struct SilentRequest {
     base_request: BaseAuthRequest,
     pub account: AccountInfo,
@@ -244,6 +252,19 @@ impl SilentRequest {
             force_refresh: None,
             redirect_uri: None,
         }
+    }
+
+    pub fn set_force_refresh(mut self, force_refresh: bool) -> Self {
+        self.force_refresh = Some(force_refresh);
+        self
+    }
+
+    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
+        match self.redirect_uri.as_mut() {
+            Some(s) => s.replace_range(.., redirect_uri),
+            None => self.redirect_uri = Some(redirect_uri.to_string()),
+        }
+        self
     }
 }
 
@@ -305,11 +326,54 @@ impl From<EndSessionRequest> for msal::EndSessionRequest {
 }
 
 #[cfg(test)]
-mod tests_in_browser {
+mod test_request {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;
+    use crate::test_lib::*;
     use wasm_bindgen_test::*;
 
-    // TODO: test all of these on js creation as currently not working? Silent
+    const FORCE_REFRESH: bool = true;
+    const REDIRECT_URI: &str = "redirect_uri";
+
+    #[wasm_bindgen_test]
+    fn mirror_auth_url_request() {
+        // TODO
+    }
+    
+    #[wasm_bindgen_test]
+    fn mirror_end_session_request() {
+        // TODO
+    }
+
+    #[wasm_bindgen_test]
+    fn mirror_redirect_request() {
+        // TODO
+    }
+
+    #[wasm_bindgen_test]
+    fn mirror_silent_request() {
+        let base_req = BaseAuthRequest::from(SCOPE)
+            .set_authority(AUTHORITY)
+            .set_correlation_id(CORRELATION_ID);
+
+        let account = AccountInfo {
+            home_account_id: HOME_ACCOUNT_ID.to_string(),
+            environment: ENVIRONMENT.to_string(),
+            tenant_id: TENANT_ID.to_string(),
+            username: USERNAME.to_string(),
+        };
+
+        let silent_req = SilentRequest::from_account_info(base_req.clone(), account)
+            .set_force_refresh(FORCE_REFRESH)
+            .set_redirect_uri(REDIRECT_URI);
+
+        let js_silent_req: msal::SilentRequest = silent_req.clone().into();
+
+        // TODO: Finish testing all (i've checked in browser)
+        assert_eq!(
+            silent_req.base_request.correlation_id,
+            js_silent_req.correlation_id()
+        )
+    }
 }

@@ -157,6 +157,9 @@ extern "C" {
     #[wasm_bindgen(method, setter, js_name = correlationId)]
     pub fn set_correlation_id(request: &SilentRequest, correlation_id: String);
 
+    #[wasm_bindgen(method, getter, js_name = correlationId)]
+    pub fn correlation_id(request: &SilentRequest) -> Option<String>;
+
     #[wasm_bindgen(method, setter, js_name = forceRefresh)]
     pub fn set_force_refresh(request: &SilentRequest, force_refresh: bool);
 

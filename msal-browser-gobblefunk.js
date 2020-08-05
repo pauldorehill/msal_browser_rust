@@ -83,8 +83,8 @@ export class EndSessionRequest {
  */
 export class SilentRequest {
     constructor(scopes, account) {
-        scopes = scopes;
-        account = account;
+        this.scopes = scopes;
+        this.account = account;
     }
     authority;
     correlationId;

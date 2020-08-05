@@ -281,11 +281,25 @@ pub mod prelude {
 }
 
 #[cfg(test)]
-mod tests_in_browser {
+mod test_lib {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use crate::*;
     use wasm_bindgen_test::*;
+
+    pub const HOME_ACCOUNT_ID: &str = "home_account_id";
+    pub const ENVIRONMENT: &str = "environment";
+    pub const TENANT_ID: &str = "tenant_id";
+    pub const USERNAME: &str = "username";
+    pub const SCOPE: &str = "scope";
+    pub const AUTHORITY: &str = "authority";
+    pub const CORRELATION_ID: &str = "correlation_id";
+    pub const UNIQUE_ID: &str = "unique_id";
+    pub const ID_TOKEN: &str = "id_token";
+    pub const ACCESS_TOKEN: &str = "access token";
+    pub const FROM_CACHE: bool = false;
+    pub const STATE: Option<&str> = Some("state");
+    pub const FAMILY_ID: Option<&str> = Some("family_id");
 
     fn home_account_id(i: usize) -> String {
         format!("home_account_id_{}", i)
@@ -301,7 +315,7 @@ mod tests_in_browser {
     }
 
     // Make on the Js side
-    fn make_account_info(i: usize) -> msal::AccountInfo {
+    fn make_account_info_in_js_land(i: usize) -> msal::AccountInfo {
         msal::AccountInfo::new(
             home_account_id(i),
             environment(i),
@@ -311,14 +325,29 @@ mod tests_in_browser {
     }
 
     #[wasm_bindgen_test]
-    fn convert_account_info() {
+    fn mirror_account_info() {
+        let account = AccountInfo {
+            home_account_id: HOME_ACCOUNT_ID.to_string(),
+            environment: ENVIRONMENT.to_string(),
+            tenant_id: TENANT_ID.to_string(),
+            username: USERNAME.to_string(),
+        };
+        let js_ac: msal::AccountInfo = account.clone().into();
+        assert_eq!(js_ac.home_account_id(), account.home_account_id);
+        assert_eq!(js_ac.environment(), account.environment);
+        assert_eq!(js_ac.tenant_id(), account.tenant_id);
+        assert_eq!(js_ac.username(), account.username);
+    }
+
+    #[wasm_bindgen_test]
+    fn convert_account_info_array() {
         let len: usize = 10;
-        let xs = Array::new();
+        let js_accounts = Array::new();
         for i in 0..len {
-            xs.push(&make_account_info(i));
+            js_accounts.push(&make_account_info_in_js_land(i));
         }
 
-        let accounts = AccountInfo::from_array(xs);
+        let accounts = AccountInfo::from_array(js_accounts);
 
         for i in 0..len {
             assert_eq!(home_account_id(i), accounts[i].home_account_id);
@@ -329,48 +358,51 @@ mod tests_in_browser {
     }
 
     #[wasm_bindgen_test]
-    fn convert_authentication_result() {
-        let unique_id = "unique_id".to_string();
-        let tenant_id = "tenant_id".to_string();
-        let scopes = JsArrayString::from("scopes");
-        let account = make_account_info(0);
-        let id_token = "id_token".to_string();
-        // let id_token_claims = JsHashMapStringString::from(("claim key", "claim value"));
-        let access_token = "access token".to_string();
-        let from_cache = false;
+    fn mirror_authentication_result() {
         let expires_on = Date::new_0();
-        let state = Some("state".to_string());
-        let family_id = Some("family_id".to_string());
-
-        let ar = msal::AuthenticationResult::new();
-        ar.set_unique_id(unique_id.clone());
-        ar.set_tenant_id(tenant_id.clone());
-        ar.set_scopes(scopes.clone().into());
-        ar.set_account(account.clone().into());
-        ar.set_id_token(id_token.clone());
+        let account = make_account_info_in_js_land(0);
+        let scopes = JsArrayString::from(SCOPE);
+        // let id_token_claims = JsHashMapStringString::from(("claim key", "claim value"));
         // ar.set_id_token_claims(id_token_claims.clone().into());
-        ar.set_access_token(access_token.clone());
-        ar.set_from_cache(from_cache);
-        ar.set_expires_on(expires_on.clone());
-        ar.set_ext_expires_on(Some(expires_on.clone()));
-        ar.set_state(state.clone());
-        ar.set_family_id(family_id.clone());
 
-        let ar_wasm: AuthenticationResult = ar.into();
-        assert_eq!(ar_wasm.unique_id, unique_id);
-        assert_eq!(ar_wasm.tenant_id, tenant_id);
-        assert_eq!(ar_wasm.scopes, scopes.0);
-        assert_eq!(ar_wasm.account.environment, account.environment());
-        assert_eq!(ar_wasm.account.home_account_id, account.home_account_id());
-        assert_eq!(ar_wasm.account.tenant_id, account.tenant_id());
-        assert_eq!(ar_wasm.account.username, account.username());
-        assert_eq!(ar_wasm.id_token, id_token);
+        let js_ar = msal::AuthenticationResult::new();
+        js_ar.set_unique_id(UNIQUE_ID.to_string());
+        js_ar.set_tenant_id(TENANT_ID.to_string());
+        js_ar.set_scopes(scopes.clone().into());
+        js_ar.set_account(account.clone().into());
+        js_ar.set_id_token(ID_TOKEN.to_string());
+        js_ar.set_access_token(ACCESS_TOKEN.to_string());
+        js_ar.set_from_cache(FROM_CACHE);
+        js_ar.set_expires_on(expires_on.clone());
+        js_ar.set_ext_expires_on(Some(expires_on.clone()));
+        js_ar.set_state(STATE.map(String::from));
+        js_ar.set_family_id(FAMILY_ID.map(String::from));
+
+        let wasm_ar: AuthenticationResult = js_ar.into();
+        assert_eq!(wasm_ar.unique_id, UNIQUE_ID);
+        assert_eq!(wasm_ar.tenant_id, TENANT_ID);
+        assert_eq!(wasm_ar.scopes, scopes.0);
+        assert_eq!(wasm_ar.account.environment, account.environment());
+        assert_eq!(wasm_ar.account.home_account_id, account.home_account_id());
+        assert_eq!(wasm_ar.account.tenant_id, account.tenant_id());
+        assert_eq!(wasm_ar.account.username, account.username());
+        assert_eq!(wasm_ar.id_token, ID_TOKEN);
         // assert_eq!(ar_wasm.id_token_claims, id_token_claims.0);
-        assert_eq!(ar_wasm.access_token, access_token);
-        assert_eq!(ar_wasm.from_cache, from_cache);
-        assert_eq!(ar_wasm.expires_on, expires_on);
-        assert_eq!(ar_wasm.ext_expires_on, Some(expires_on));
-        assert_eq!(ar_wasm.state, state);
-        assert_eq!(ar_wasm.family_id, family_id);
+        assert_eq!(wasm_ar.access_token, ACCESS_TOKEN);
+        assert_eq!(wasm_ar.from_cache, FROM_CACHE);
+        assert_eq!(wasm_ar.expires_on, expires_on);
+        assert_eq!(wasm_ar.ext_expires_on, Some(expires_on));
+        assert_eq!(wasm_ar.state, STATE.map(String::from));
+        assert_eq!(wasm_ar.family_id, FAMILY_ID.map(String::from));
+    }
+
+    #[wasm_bindgen_test]
+    fn mirror_configuration() {
+        // TODO
+    }
+
+    #[wasm_bindgen_test]
+    fn mirror_brower_auth_options() {
+        // TODO
     }
 }
