@@ -25,7 +25,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 pub trait JsMirror: std::marker::Sized {
-    // TODO: Toggle this on
+    // TODO: Toggle this on?
     type JsTarget: From<Self>; // + Into<Self>;
 }
 
@@ -69,18 +69,21 @@ extern "C" {
     #[wasm_bindgen(constructor)]
     pub fn new(scopes: &Array) -> AuthorizationUrlRequest;
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter)]
     pub fn authority(this: &AuthorizationUrlRequest) -> String;
 
     #[wasm_bindgen(method, setter)]
     pub fn set_authority(this: &AuthorizationUrlRequest, authority: String);
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = correlationId)]
     pub fn correlation_id(this: &AuthorizationUrlRequest) -> String;
 
     #[wasm_bindgen(method, setter, js_name = correlationId)]
     pub fn set_correlation_id(this: &AuthorizationUrlRequest, correlation_id: String);
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = loginHint)]
     pub fn login_hint(this: &AuthorizationUrlRequest) -> String;
 
@@ -92,9 +95,9 @@ extern "C" {
 
     #[wasm_bindgen(constructor)]
     pub fn new(
-        homeAccountId: String,
+        home_account_id: String,
         environment: String,
-        tenantId: String,
+        tenant_id: String,
         username: String,
     ) -> AccountInfo;
 
@@ -116,24 +119,28 @@ extern "C" {
     #[wasm_bindgen(constructor)]
     pub fn new() -> EndSessionRequest;
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter)]
-    pub fn account(this: &EndSessionRequest) -> Option<String>;
+    pub fn account(this: &EndSessionRequest) -> Option<AccountInfo>;
 
     #[wasm_bindgen(method, setter)]
-    pub fn set_account(this: &EndSessionRequest, account: String);
+    pub fn set_account(this: &EndSessionRequest, account: AccountInfo);
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = postLogoutRedirectUri)]
     pub fn post_logout_redirect_uri(this: &EndSessionRequest) -> Option<String>;
 
     #[wasm_bindgen(method, setter, js_name = postLogoutRedirectUri)]
     pub fn set_post_logout_redirect_uri(this: &EndSessionRequest, post_logout_redirect_uri: String);
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter)]
     pub fn authority(this: &EndSessionRequest) -> Option<String>;
 
     #[wasm_bindgen(method, setter)]
     pub fn set_authority(this: &EndSessionRequest, authority: String);
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = correlationId)]
     pub fn correlation_id(this: &EndSessionRequest) -> Option<String>;
 
@@ -170,6 +177,7 @@ extern "C" {
     #[wasm_bindgen(method, setter, js_name = correlationId)]
     pub fn set_correlation_id(request: &SilentRequest, correlation_id: String);
 
+    #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = correlationId)]
     pub fn correlation_id(request: &SilentRequest) -> Option<String>;
 
@@ -181,7 +189,7 @@ extern "C" {
     pub fn force_refresh(request: &SilentRequest) -> Option<bool>;
 
     #[wasm_bindgen(method, setter, js_name = redirectUri)]
-    pub fn set_redirect_uri(request: &SilentRequest, redirectUri: String);
+    pub fn set_redirect_uri(request: &SilentRequest, redirect_uri: String);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = redirectUri)]
@@ -310,9 +318,7 @@ impl From<Vec<String>> for AuthorizationUrlRequest {
 }
 
 // TODO: Should i be using unchecked? I know the types, would likely
-// just unwrap anyway... but could pass out more usefull error?
-// Using newtype pattern to allow use of traits
-
+// just unwrap anyway... but could pass out more useful error?
 fn array_to_vec<JsT, T>(array: Array) -> Vec<T>
 where
     JsT: JsCast + Into<T>,
@@ -324,7 +330,7 @@ where
 }
 
 /// These are so can use From<T>
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone)]
 pub(crate) struct JsArrayString(pub Vec<String>);
 
 impl From<String> for JsArrayString {

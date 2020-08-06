@@ -115,8 +115,8 @@ mod tests {
         assert_eq!(client_app.client_id(), CLIENT_ID);
     }
 
-    // How to correcly test these? Since require user input...
-    // supress the warning for now
+    // How to correctly test these? Since require user input...
+    // suppress the warning for now
     #[allow(unused_must_use)]
     #[wasm_bindgen_test]
     async fn login_popup() {

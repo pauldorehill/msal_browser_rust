@@ -1,8 +1,8 @@
-// Define all the js types in pure rust so that intellisense plays nice and can
-// create a builder pattern
+//! msal-browser.js in Rust WASM
 
-// TODO: Since working with WASM, use String over &str?
 mod msal;
+// TODO: Since working with WASM, I used String - use &str?
+// TODO: doc build for all features
 
 #[cfg(feature = "popup")]
 pub mod popup_app;
@@ -15,6 +15,14 @@ use msal::{JsArrayString, JsMirror};
 use requests::*;
 use std::{collections::HashMap, convert::TryFrom};
 use wasm_bindgen::{JsCast, JsValue};
+
+// TODO: Is this worth it? May 'leak' but avoids allocation
+fn set_option_string(current_value: &mut Option<String>, new_value: &str) {
+    match current_value {
+        None => *current_value = Some(String::from(new_value)),
+        Some(s) => s.replace_range(.., new_value),
+    }
+}
 
 pub struct BrowserAuthOptions {
     client_id: String,
@@ -32,8 +40,8 @@ impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
         auth_options.authority.iter().for_each(|a| {
             auth.set_authority(&a);
         });
-        auth_options.redirect_uri.iter().for_each(|ru| {
-            auth.set_redirect_uri(ru);
+        auth_options.redirect_uri.iter().for_each(|uri| {
+            auth.set_redirect_uri(uri);
         });
         auth
     }
@@ -52,10 +60,7 @@ impl From<msal::BrowserAuthOptions> for BrowserAuthOptions {
 impl BrowserAuthOptions {
     // Small strings so don't worry about 'leaked' memory on replace
     fn ref_set_authority(&mut self, authority: &str) {
-        match self.authority.as_mut() {
-            Some(s) => s.replace_range(.., authority),
-            None => self.authority = Some(authority.to_string()),
-        }
+        set_option_string(&mut self.authority, authority)
     }
 
     pub fn set_authority(mut self, authority: &str) -> Self {
@@ -64,10 +69,7 @@ impl BrowserAuthOptions {
     }
 
     fn ref_set_redirect_uri(&mut self, redirect_uri: &str) {
-        match self.redirect_uri.as_mut() {
-            Some(s) => s.replace_range(.., redirect_uri),
-            None => self.redirect_uri = Some(redirect_uri.to_string()),
-        }
+        set_option_string(&mut self.redirect_uri, redirect_uri)
     }
 
     pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
@@ -86,7 +88,7 @@ impl From<&str> for BrowserAuthOptions {
     }
 }
 
-// TODO: There are the other fields
+// TODO: Add in all fields
 pub struct Configuration {
     auth: BrowserAuthOptions,
     // cache: Option<CacheOptions>,
@@ -146,14 +148,17 @@ impl From<&str> for Configuration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+// TODO: Should this move to an enum of all claims? Access & Id, how to handle optional / custom?
+// https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
+// https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
+// https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-optional-claims#configuring-directory-extension-optional-claims
+#[derive(Clone, PartialEq)]
 pub enum TokenValue {
     String(String),
     Float(f64),
 }
 
-// TODO: Date
-// Check these are in UTC and do something better? Could just keep as Js Date and provide nicer methods with intellisense?
+// TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
 pub struct AuthenticationResult {
     pub unique_id: String,
@@ -195,10 +200,6 @@ impl From<JsValue> for AuthenticationResult {
     }
 }
 
-/// https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/initialization.md#choosing-an-interaction-type
-/// there are two apis: popup and redirect. Redirect requires that you must call `handleRedirectPromise()`
-/// because of this I will split into two and also crate a trait
-
 pub trait PublicClientApplication {
     fn auth(&self) -> &msal::PublicClientApplication;
 
@@ -238,8 +239,6 @@ pub trait PublicClientApplication {
 // https://github.com/dtolnay/async-trait
 
 // Silent login https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/login-user.md#silent-login-with-ssosilent
-// Can use this first to try loging in without interation, if it fails will then need to run the normal login work flow
-// Note the 'account' (i think authority) must be set for this to run
 // needs a login_hint, sid or account object on the request
 async fn sso_silent(
     client_app: &msal::PublicClientApplication,
@@ -250,7 +249,7 @@ async fn sso_silent(
 
 // Called by both popup and redirect
 // https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/acquire-token.md
-// Call this first, then if it fails will will need to call the interative methods
+// Call this first, then if it fails will will need to call the interactive methods
 async fn acquire_token_silent(
     client_app: &msal::PublicClientApplication,
     request: SilentRequest,
@@ -330,6 +329,7 @@ mod tests {
     pub const SCOPE: &str = "scope";
     pub const AUTHORITY: &str = "authority";
     pub const CORRELATION_ID: &str = "correlation_id";
+    pub const POST_LOGOUT_URI: &str = "correlation_id";
 
     fn home_account_id(i: usize) -> String {
         format!("home_account_id_{}", i)
@@ -344,6 +344,25 @@ mod tests {
         format!("username_{}", i)
     }
 
+    pub fn account() -> AccountInfo {
+        AccountInfo {
+            home_account_id: HOME_ACCOUNT_ID.to_string(),
+            environment: ENVIRONMENT.to_string(),
+            tenant_id: TENANT_ID.to_string(),
+            username: USERNAME.to_string(),
+        }
+    }
+
+    pub fn js_cast_checker<T>(js: JsValue)
+    where
+        T: JsCast,
+    {
+        match js.dyn_into::<T>() {
+            Ok(_) => (),
+            Err(_) => panic!("failed js cast"),
+        }
+    }
+
     // Make on the Js side
     fn make_account_info_in_js_land(i: usize) -> msal::AccountInfo {
         msal::AccountInfo::new(
@@ -356,12 +375,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn mirror_account_info() {
-        let account = AccountInfo {
-            home_account_id: HOME_ACCOUNT_ID.to_string(),
-            environment: ENVIRONMENT.to_string(),
-            tenant_id: TENANT_ID.to_string(),
-            username: USERNAME.to_string(),
-        };
+        let account = account();
         let js_ac: msal::AccountInfo = account.clone().into();
         assert_eq!(js_ac.home_account_id(), account.home_account_id);
         assert_eq!(js_ac.environment(), account.environment);
@@ -379,11 +393,11 @@ mod tests {
 
         let accounts = AccountInfo::from_array(js_accounts);
 
-        for i in 0..len {
-            assert_eq!(home_account_id(i), accounts[i].home_account_id);
-            assert_eq!(environment(i), accounts[i].environment);
-            assert_eq!(tenant_id(i), accounts[i].tenant_id);
-            assert_eq!(username(i), accounts[i].username);
+        for (i, account) in accounts.iter().enumerate() {
+            assert_eq!(home_account_id(i), account.home_account_id);
+            assert_eq!(environment(i), account.environment);
+            assert_eq!(tenant_id(i), account.tenant_id);
+            assert_eq!(username(i), account.username);
         }
     }
 
@@ -406,21 +420,13 @@ mod tests {
         let _: Configuration = msalConfig.clone().try_into().unwrap();
     }
 
-    // #[wasm_bindgen_test]
-    // fn parse_config_result() {
-    //     let _: Configuration = msalConfig
-    //         .clone()
-    //         .unchecked_into::<msal::Configuration>()
-    //         .into();
-    // }
-
     #[wasm_bindgen_test]
     fn mirror_configuration() {
-        // TODO
+        // TODO: Write tests
     }
 
     #[wasm_bindgen_test]
-    fn mirror_brower_auth_options() {
-        // TODO
+    fn mirror_browser_auth_options() {
+        // TODO: Write tests
     }
 }

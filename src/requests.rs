@@ -1,4 +1,4 @@
-use crate::{msal, AccountInfo};
+use crate::{msal, set_option_string, AccountInfo};
 use msal::{JsArrayString, JsMirror};
 use std::{collections::HashMap, fmt::Display};
 
@@ -228,7 +228,7 @@ impl From<Vec<String>> for RedirectRequest {
 
 #[cfg(feature = "redirect")]
 impl From<RedirectRequest> for msal::RedirectRequest {
-    //TODO: Add in all the values
+    // TODO: Add in all fields
     fn from(request: RedirectRequest) -> Self {
         let auth_req = msal::RedirectRequest::new(
             &JsArrayString::from(request.auth_url_req.base_request.scopes.clone()).into(),
@@ -295,12 +295,34 @@ impl From<SilentRequest> for msal::SilentRequest {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct EndSessionRequest {
-    account: Option<String>,
+    account: Option<AccountInfo>,
     post_logout_redirect_uri: Option<String>,
     authority: Option<String>,
     correlation_id: Option<String>,
+}
+
+impl EndSessionRequest {
+    pub fn set_account(mut self, account: AccountInfo) -> Self {
+        self.account = Some(account);
+        self
+    }
+
+    pub fn set_post_logout_redirect_uri(mut self, post_logout_redirect_uri: &str) -> Self {
+        set_option_string(&mut self.post_logout_redirect_uri, post_logout_redirect_uri);
+        self
+    }
+
+    pub fn set_authority(mut self, authority: &str) -> Self {
+        set_option_string(&mut self.authority, authority);
+        self
+    }
+
+    pub fn set_correlation_id(mut self, correlation_id: &str) -> Self {
+        set_option_string(&mut self.correlation_id, correlation_id);
+        self
+    }
 }
 
 impl JsMirror for EndSessionRequest {
@@ -311,17 +333,20 @@ impl From<EndSessionRequest> for msal::EndSessionRequest {
     fn from(request: EndSessionRequest) -> Self {
         let r = msal::EndSessionRequest::new();
         request.account.into_iter().for_each(|v| {
-            r.set_account(v);
+            r.set_account(v.into());
         });
         request
             .post_logout_redirect_uri
             .into_iter()
-            .for_each(|v| r.set_account(v));
-        request.authority.into_iter().for_each(|v| r.set_account(v));
+            .for_each(|v| r.set_post_logout_redirect_uri(v));
+        request
+            .authority
+            .into_iter()
+            .for_each(|v| r.set_authority(v));
         request
             .correlation_id
             .into_iter()
-            .for_each(|v| r.set_account(v));
+            .for_each(|v| r.set_correlation_id(v));
         r
     }
 }
@@ -339,71 +364,70 @@ mod test_request {
 
     #[wasm_bindgen_test]
     fn mirror_auth_url_request() {
-        // TODO
-    }
-
-    #[wasm_bindgen_test]
-    fn mirror_end_session_request() {
-        // TODO
+        // TODO: Write tests
     }
 
     #[wasm_bindgen_test]
     fn mirror_redirect_request() {
-        // TODO
+        // TODO: Write tests
+    }
+
+    fn base_req() -> BaseAuthRequest {
+        BaseAuthRequest::from(SCOPE)
+            .set_authority(AUTHORITY)
+            .set_correlation_id(CORRELATION_ID)
     }
 
     #[wasm_bindgen_test]
     fn mirror_silent_request() {
-        let base_req = BaseAuthRequest::from(SCOPE)
-            .set_authority(AUTHORITY)
-            .set_correlation_id(CORRELATION_ID);
-
-        let account = AccountInfo {
-            home_account_id: HOME_ACCOUNT_ID.to_string(),
-            environment: ENVIRONMENT.to_string(),
-            tenant_id: TENANT_ID.to_string(),
-            username: USERNAME.to_string(),
-        };
-
-        let silent_req = SilentRequest::from_account_info(base_req.clone(), account)
+        let req = SilentRequest::from_account_info(base_req(), account())
             .set_force_refresh(FORCE_REFRESH)
             .set_redirect_uri(REDIRECT_URI);
 
-        let js_silent_req: msal::SilentRequest = silent_req.clone().into();
+        let js_req: msal::SilentRequest = req.clone().into();
 
-        // TODO: Finish testing all (i've checked in browser)
         assert_eq!(
-            silent_req.base_request.scopes,
-            JsArrayString::from(js_silent_req.scopes()).0
+            req.base_request.scopes,
+            JsArrayString::from(js_req.scopes()).0
         );
+        assert_eq!(req.base_request.correlation_id, js_req.correlation_id());
+        assert_eq!(req.base_request.authority, js_req.authority());
         assert_eq!(
-            silent_req.base_request.correlation_id,
-            js_silent_req.correlation_id()
+            req.account.home_account_id,
+            js_req.account().home_account_id()
         );
-        assert_eq!(silent_req.base_request.authority, js_silent_req.authority());
+        assert_eq!(req.account.environment, js_req.account().environment());
+        assert_eq!(req.account.tenant_id, js_req.account().tenant_id());
+        assert_eq!(req.account.username, js_req.account().username());
+        assert_eq!(req.force_refresh, js_req.force_refresh());
+        assert_eq!(req.redirect_uri, js_req.redirect_uri());
+
+        js_cast_checker::<msal::SilentRequest>(js_req.into());
+    }
+
+    #[wasm_bindgen_test]
+    fn mirror_end_session_request() {
+        let req = EndSessionRequest::default()
+            .set_account(account())
+            .set_authority(AUTHORITY)
+            .set_correlation_id(CORRELATION_ID)
+            .set_post_logout_redirect_uri(POST_LOGOUT_URI);
+
+        let js_req: msal::EndSessionRequest = req.clone().into();
+        assert_eq!(req.correlation_id, js_req.correlation_id());
         assert_eq!(
-            silent_req.account.home_account_id,
-            js_silent_req.account().home_account_id()
+            req.post_logout_redirect_uri,
+            js_req.post_logout_redirect_uri()
         );
+        assert_eq!(req.authority, js_req.authority());
         assert_eq!(
-            silent_req.account.environment,
-            js_silent_req.account().environment()
+            req.account.as_ref().unwrap().home_account_id,
+            js_req.account().unwrap().home_account_id()
         );
-        assert_eq!(
-            silent_req.account.tenant_id,
-            js_silent_req.account().tenant_id()
-        );
-        assert_eq!(
-            silent_req.account.username,
-            js_silent_req.account().username()
-        );
-        assert_eq!(
-            silent_req.force_refresh,
-            js_silent_req.force_refresh()
-        );
-        assert_eq!(
-            silent_req.redirect_uri,
-            js_silent_req.redirect_uri()
-        );
+        assert_eq!(req.account.as_ref().unwrap().environment, js_req.account().unwrap().environment());
+        assert_eq!(req.account.as_ref().unwrap().tenant_id, js_req.account().unwrap().tenant_id());
+        assert_eq!(req.account.as_ref().unwrap().username, js_req.account().unwrap().username());
+
+        js_cast_checker::<msal::EndSessionRequest>(js_req.into());
     }
 }
