@@ -80,7 +80,7 @@ impl<'a> From<BrowserAuthOptions> for PopupApp {
 }
 
 #[cfg(test)]
-mod tests_in_browser {
+mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;
@@ -98,8 +98,8 @@ mod tests_in_browser {
         let c = Configuration::from(b);
         let client_app = PopupApp::new(c);
         assert_eq!(client_app.client_id(), CLIENT_ID);
-        assert_eq!(client_app.authority(), AUTHORITY);
-        assert_eq!(client_app.redirect_uri(), REDIRECT_URI);
+        assert_eq!(client_app.authority().unwrap(), AUTHORITY);
+        assert_eq!(client_app.redirect_uri().unwrap(), REDIRECT_URI);
     }
 
     #[wasm_bindgen_test]

@@ -13,11 +13,11 @@ pub mod popup_app;
 pub mod redirect_app;
 pub mod requests;
 
-use js_sys::{Array, Date};
+use js_sys::{Array, Date, Object};
 use msal::{JsArrayString, JsMirror};
 use requests::*;
-use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
+use std::{collections::HashMap, convert::TryFrom};
+use wasm_bindgen::{JsCast, JsStatic, JsValue};
 
 pub struct BrowserAuthOptions {
     client_id: String,
@@ -39,6 +39,16 @@ impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
             auth.set_redirect_uri(ru);
         });
         auth
+    }
+}
+
+impl From<msal::BrowserAuthOptions> for BrowserAuthOptions {
+    fn from(auth: msal::BrowserAuthOptions) -> Self {
+        Self {
+            client_id: auth.client_id(),
+            authority: auth.authority(),
+            redirect_uri: auth.redirect_uri(),
+        }
     }
 }
 
@@ -79,8 +89,11 @@ impl From<&str> for BrowserAuthOptions {
     }
 }
 
+// TODO: There are the other fields
 pub struct Configuration {
     auth: BrowserAuthOptions,
+    // cache: Option<CacheOptions>,
+    // system: Option<BrowserSystemOptions>,
 }
 
 impl JsMirror for Configuration {
@@ -90,6 +103,22 @@ impl JsMirror for Configuration {
 impl From<Configuration> for msal::Configuration {
     fn from(config: Configuration) -> Self {
         msal::Configuration::new(&config.auth.into())
+    }
+}
+
+impl From<msal::Configuration> for Configuration {
+    fn from(config: msal::Configuration) -> Self {
+        Self {
+            auth: config.auth().into(),
+        }
+    }
+}
+
+impl TryFrom<Object> for Configuration {
+    type Error = JsValue;
+    fn try_from(js_obj: Object) -> Result<Self, Self::Error> {
+        let v: Configuration = js_obj.unchecked_into::<msal::Configuration>().into();
+        Ok(v)
     }
 }
 
@@ -120,7 +149,13 @@ impl From<&str> for Configuration {
     }
 }
 
-// TODO: Date + work out what is going wrong passing token claims
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenValue {
+    String(String),
+    Float(f64),
+}
+
+// TODO: Date
 // Check these are in UTC and do something better? Could just keep as Js Date and provide nicer methods with intellisense?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
 pub struct AuthenticationResult {
@@ -129,7 +164,7 @@ pub struct AuthenticationResult {
     pub scopes: Vec<String>,
     pub account: AccountInfo,
     pub id_token: String,
-    // pub id_token_claims: HashMap<String, String>,
+    pub id_token_claims: HashMap<String, TokenValue>,
     pub access_token: String,
     pub from_cache: bool,
     pub expires_on: Date,
@@ -146,7 +181,7 @@ impl From<msal::AuthenticationResult> for AuthenticationResult {
             scopes: JsArrayString::from(auth_result.scopes()).0,
             account: auth_result.account().into(),
             id_token: auth_result.id_token(),
-            // id_token_claims: JsHashMapStringString::from(auth_result.id_token_claims()).0,
+            id_token_claims: msal::TokenHashMap::from(auth_result.id_token_claims()).0,
             access_token: auth_result.access_token(),
             from_cache: auth_result.from_cache(),
             expires_on: auth_result.expires_on(),
@@ -178,23 +213,24 @@ pub trait PublicClientApplication {
         self.auth().config().auth().client_id()
     }
 
-    fn authority(&self) -> String {
+    fn authority(&self) -> Option<String> {
         self.auth().config().auth().authority()
     }
 
-    fn redirect_uri(&self) -> String {
+    fn redirect_uri(&self) -> Option<String> {
         self.auth().config().auth().redirect_uri()
     }
 
-    fn get_all_accounts(&self) -> Vec<AccountInfo> {
-        AccountInfo::from_array(self.auth().get_all_accounts())
+    fn get_all_accounts(&self) -> Option<Vec<AccountInfo>> {
+        self.auth().get_all_accounts().map(AccountInfo::from_array)
     }
 
-    fn get_account_by_username(&self, username: &str) -> AccountInfo {
+    fn get_account_by_username(&self, username: &str) -> Option<AccountInfo> {
         self.auth()
             .get_account_by_username(username.to_string())
-            .into()
+            .map(Into::into)
     }
+
     fn logout(&self, request: Option<EndSessionRequest>) {
         self.auth().logout(request.unwrap_or_default().into())
     }
@@ -281,10 +317,13 @@ pub mod prelude {
 }
 
 #[cfg(test)]
-mod test_lib {
+mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use crate::*;
+    use js_sys::Object;
+    use std::convert::TryInto;
+    use wasm_bindgen::prelude::*;
     use wasm_bindgen_test::*;
 
     pub const HOME_ACCOUNT_ID: &str = "home_account_id";
@@ -294,12 +333,6 @@ mod test_lib {
     pub const SCOPE: &str = "scope";
     pub const AUTHORITY: &str = "authority";
     pub const CORRELATION_ID: &str = "correlation_id";
-    pub const UNIQUE_ID: &str = "unique_id";
-    pub const ID_TOKEN: &str = "id_token";
-    pub const ACCESS_TOKEN: &str = "access token";
-    pub const FROM_CACHE: bool = false;
-    pub const STATE: Option<&str> = Some("state");
-    pub const FAMILY_ID: Option<&str> = Some("family_id");
 
     fn home_account_id(i: usize) -> String {
         format!("home_account_id_{}", i)
@@ -357,44 +390,32 @@ mod test_lib {
         }
     }
 
-    #[wasm_bindgen_test]
-    fn mirror_authentication_result() {
-        let expires_on = Date::new_0();
-        let account = make_account_info_in_js_land(0);
-        let scopes = JsArrayString::from(SCOPE);
-        // let id_token_claims = JsHashMapStringString::from(("claim key", "claim value"));
-        // ar.set_id_token_claims(id_token_claims.clone().into());
-
-        let js_ar = msal::AuthenticationResult::new();
-        js_ar.set_unique_id(UNIQUE_ID.to_string());
-        js_ar.set_tenant_id(TENANT_ID.to_string());
-        js_ar.set_scopes(scopes.clone().into());
-        js_ar.set_account(account.clone().into());
-        js_ar.set_id_token(ID_TOKEN.to_string());
-        js_ar.set_access_token(ACCESS_TOKEN.to_string());
-        js_ar.set_from_cache(FROM_CACHE);
-        js_ar.set_expires_on(expires_on.clone());
-        js_ar.set_ext_expires_on(Some(expires_on.clone()));
-        js_ar.set_state(STATE.map(String::from));
-        js_ar.set_family_id(FAMILY_ID.map(String::from));
-
-        let wasm_ar: AuthenticationResult = js_ar.into();
-        assert_eq!(wasm_ar.unique_id, UNIQUE_ID);
-        assert_eq!(wasm_ar.tenant_id, TENANT_ID);
-        assert_eq!(wasm_ar.scopes, scopes.0);
-        assert_eq!(wasm_ar.account.environment, account.environment());
-        assert_eq!(wasm_ar.account.home_account_id, account.home_account_id());
-        assert_eq!(wasm_ar.account.tenant_id, account.tenant_id());
-        assert_eq!(wasm_ar.account.username, account.username());
-        assert_eq!(wasm_ar.id_token, ID_TOKEN);
-        // assert_eq!(ar_wasm.id_token_claims, id_token_claims.0);
-        assert_eq!(wasm_ar.access_token, ACCESS_TOKEN);
-        assert_eq!(wasm_ar.from_cache, FROM_CACHE);
-        assert_eq!(wasm_ar.expires_on, expires_on);
-        assert_eq!(wasm_ar.ext_expires_on, Some(expires_on));
-        assert_eq!(wasm_ar.state, STATE.map(String::from));
-        assert_eq!(wasm_ar.family_id, FAMILY_ID.map(String::from));
+    #[wasm_bindgen(module = "/msal-object-examples.js")]
+    extern "C" {
+        static authResponse: Object;
+        static msalConfig: Object;
     }
+
+    #[wasm_bindgen_test]
+    fn parse_authentication_result() {
+        let _: AuthenticationResult = authResponse
+            .clone()
+            .unchecked_into::<msal::AuthenticationResult>()
+            .into();
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_config_result() {
+        let _: Configuration = msalConfig.clone().try_into().unwrap();
+    }
+
+    // #[wasm_bindgen_test]
+    // fn parse_config_result() {
+    //     let _: Configuration = msalConfig
+    //         .clone()
+    //         .unchecked_into::<msal::Configuration>()
+    //         .into();
+    // }
 
     #[wasm_bindgen_test]
     fn mirror_configuration() {

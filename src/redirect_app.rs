@@ -90,7 +90,7 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;

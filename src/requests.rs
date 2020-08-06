@@ -330,7 +330,7 @@ mod test_request {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;
-    use crate::test_lib::*;
+    use crate::tests::*;
     use wasm_bindgen_test::*;
 
     const FORCE_REFRESH: bool = true;

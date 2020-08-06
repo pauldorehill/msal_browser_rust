@@ -18,14 +18,15 @@
 //! exports.PublicClientApplication = PublicClientApplication;
 //! ```
 
-use js_sys::{Array, Date, JsString, Map};
+use crate::TokenValue;
+use js_sys::{Array, Date, JsString, Map, Object};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast};
 
 pub trait JsMirror: std::marker::Sized {
     // TODO: Toggle this on
-    type JsTarget: From<Self>;// + Into<Self>;
+    type JsTarget: From<Self>; // + Into<Self>;
 }
 
 #[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
@@ -44,13 +45,13 @@ extern "C" {
     pub fn set_authority(this: &BrowserAuthOptions, authority: &str);
 
     #[wasm_bindgen(method, getter)]
-    pub fn authority(this: &BrowserAuthOptions) -> String;
+    pub fn authority(this: &BrowserAuthOptions) -> Option<String>;
 
     #[wasm_bindgen(method, setter = redirectUri)]
     pub fn set_redirect_uri(this: &BrowserAuthOptions, redirect_uri: &str);
 
     #[wasm_bindgen(method, getter = redirectUri)]
-    pub fn redirect_uri(this: &BrowserAuthOptions) -> String;
+    pub fn redirect_uri(this: &BrowserAuthOptions) -> Option<String>;
 
     // file://./../node_modules/@azure/msal-browser/dist/src/config/Configuration.d.ts
     pub type Configuration;
@@ -201,11 +202,13 @@ extern "C" {
 
     // returns [AccountInfo]
     #[wasm_bindgen(method, js_name = getAllAccounts)]
-    pub fn get_all_accounts(this: &PublicClientApplication) -> Array;
+    pub fn get_all_accounts(this: &PublicClientApplication) -> Option<Array>;
 
     #[wasm_bindgen(method, js_name = getAccountByUsername)]
-    pub fn get_account_by_username(this: &PublicClientApplication, username: String)
-        -> AccountInfo;
+    pub fn get_account_by_username(
+        this: &PublicClientApplication,
+        username: String,
+    ) -> Option<AccountInfo>;
 
     /// returns an AuthenticationResult
     #[wasm_bindgen(method, catch, js_name = ssoSilent, catch)]
@@ -242,81 +245,40 @@ extern "C" {
     #[wasm_bindgen(method, getter, js_name = uniqueId)]
     pub fn unique_id(this: &AuthenticationResult) -> String;
 
-    #[wasm_bindgen(method, setter, js_name = uniqueId)]
-    pub fn set_unique_id(this: &AuthenticationResult, unique_id: String);
-
     #[wasm_bindgen(method, getter, js_name = tenantId)]
     pub fn tenant_id(this: &AuthenticationResult) -> String;
-
-    #[wasm_bindgen(method, setter, js_name = tenantId)]
-    pub fn set_tenant_id(this: &AuthenticationResult, tenant_id: String);
 
     /// returns Vec<String>
     #[wasm_bindgen(method, getter)]
     pub fn scopes(this: &AuthenticationResult) -> Array;
 
-    #[wasm_bindgen(method, setter)]
-    pub fn set_scopes(this: &AuthenticationResult, scopes: Array);
-
     #[wasm_bindgen(method, getter)]
     pub fn account(this: &AuthenticationResult) -> AccountInfo;
-
-    #[wasm_bindgen(method, setter)]
-    pub fn set_account(this: &AuthenticationResult, account_info: AccountInfo);
 
     #[wasm_bindgen(method, getter, js_name = idToken)]
     pub fn id_token(this: &AuthenticationResult) -> String;
 
-    #[wasm_bindgen(method, setter, js_name = idToken)]
-    pub fn set_id_token(this: &AuthenticationResult, id_token: String);
-
-    /// TODO: This is throwing so i need to sort
-    /// Returns Hashmap<String, String>
-    /// When the json comes back parsing as map fails on having none of the
-    /// enumerable methods
-    /// JS exception that was thrown: TypeError: getObject(...).forEach is not a function
+    /// Returns Hashmap<String, String | f64> ?
     #[wasm_bindgen(method, getter, js_name = idTokenClaims)]
-    pub fn id_token_claims(this: &AuthenticationResult) -> Map;
-
-    /// takes a Hashmap<String, String>
-    #[wasm_bindgen(method, setter, js_name = idTokenClaims)]
-    pub fn set_id_token_claims(this: &AuthenticationResult, id_token_claims: Map);
+    pub fn id_token_claims(this: &AuthenticationResult) -> Object;
 
     #[wasm_bindgen(method, getter, js_name = accessToken)]
     pub fn access_token(this: &AuthenticationResult) -> String;
 
-    #[wasm_bindgen(method, setter, js_name = accessToken)]
-    pub fn set_access_token(this: &AuthenticationResult, access_token: String);
-
     #[wasm_bindgen(method, getter, js_name = fromCache)]
     pub fn from_cache(this: &AuthenticationResult) -> bool;
-
-    #[wasm_bindgen(method, setter, js_name = fromCache)]
-    pub fn set_from_cache(this: &AuthenticationResult, from_cache: bool);
 
     #[wasm_bindgen(method, getter, js_name = expiresOn)]
     pub fn expires_on(this: &AuthenticationResult) -> Date;
 
-    #[wasm_bindgen(method, setter, js_name = expiresOn)]
-    pub fn set_expires_on(this: &AuthenticationResult, date: Date);
-
     #[wasm_bindgen(method, getter, js_name = extExpiresOn)]
     pub fn ext_expires_on(this: &AuthenticationResult) -> Option<Date>;
-
-    #[wasm_bindgen(method, setter, js_name = extExpiresOn)]
-    pub fn set_ext_expires_on(this: &AuthenticationResult, date: Option<Date>);
 
     #[wasm_bindgen(method, getter)]
     pub fn state(this: &AuthenticationResult) -> Option<String>;
 
-    #[wasm_bindgen(method, setter)]
-    pub fn set_state(this: &AuthenticationResult, state: Option<String>);
-
     #[wasm_bindgen(method, getter, js_name = familyId)]
     pub fn family_id(this: &AuthenticationResult) -> Option<String>;
-
-    #[wasm_bindgen(method, setter, js_name = familyId)]
-    pub fn set_family_id(this: &AuthenticationResult, family_id: Option<String>);
 }
 
 /// Here to allow passing in a scopes array on the login request
@@ -374,70 +336,70 @@ impl From<JsArrayString> for Array {
         js_array_string
             .0
             .into_iter()
-            .map(|s| JsValue::from(s))
+            .map(JsValue::from)
             .collect()
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct JsHashMapStringString(pub HashMap<String, String>);
+#[derive(Clone)]
+pub(crate) struct TokenHashMap(pub HashMap<String, TokenValue>);
 
-impl From<Map> for JsHashMapStringString {
-    fn from(js_map: Map) -> Self {
+impl From<Object> for TokenHashMap {
+    fn from(js_obj: Object) -> Self {
         let mut hm = HashMap::new();
-        // Value and Key are swapped in Js land!
-        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/forEach
-        js_map.for_each(&mut |v, k| {
-            hm.insert(
-                k.unchecked_into::<JsString>().into(),
-                v.unchecked_into::<JsString>().into(),
-            );
+        let keys: Array = js_sys::Object::keys(&js_obj);
+        let values: Array = js_sys::Object::values(&js_obj);
+        keys.for_each(&mut |k, i, _| {
+            let v = {
+                let v = values.get(i);
+                match v.as_string() {
+                    Some(s) => TokenValue::String(s),
+                    None => TokenValue::Float(v.as_f64().unwrap()),
+                }
+            };
+            // Returned keys are always strings
+            let k = k.unchecked_into::<JsString>().into();
+            hm.insert(k, v);
         });
-        JsHashMapStringString(hm)
+        TokenHashMap(hm)
     }
 }
 
-impl From<JsHashMapStringString> for Map {
-    fn from(hm: JsHashMapStringString) -> Self {
-        let js_hm = Map::new();
-        for (k, v) in hm.0 {
-            js_hm.set(&k.into(), &v.into());
+impl From<TokenHashMap> for Map {
+    fn from(map: TokenHashMap) -> Self {
+        let js_map = Map::new();
+        for (k, v) in map.0 {
+            let v = match v {
+                TokenValue::String(s) => s.into(),
+                TokenValue::Float(f) => f.into(),
+            };
+            js_map.set(&k.into(), &v);
         }
-        js_hm
+        js_map
     }
+    
 }
 
 #[cfg(test)]
-impl From<HashMap<String, String>> for JsHashMapStringString {
-    fn from(hm: HashMap<String, String>) -> Self {
-        Self(hm)
-    }
-}
-
-#[cfg(test)]
-impl From<(&str, &str)> for JsHashMapStringString {
-    fn from(kv: (&str, &str)) -> Self {
-        let mut hm = HashMap::new();
-        hm.insert(kv.0.to_string(), kv.1.to_string());
-        Self(hm)
-    }
-}
-
-#[cfg(test)]
-mod tests_in_browser {
+mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;
     use wasm_bindgen_test::*;
-    
-    // This is here since i discovered that Key and Value are strangely switched on a Map.foreach in Js land
+
+    #[wasm_bindgen(module = "/msal-object-examples.js")]
+    extern "C" {
+        static accessToken: Object;
+        static idToken: Object;
+    }
+
     #[wasm_bindgen_test]
-    fn make_hashmap_from_map() {
-        let kv = ("claim key".to_string(), "claim value".to_string());
-        let js_map = Map::new();
-        js_map.set(&kv.0.into(), &kv.1.into());
-        let js_hash_map = JsHashMapStringString::from(("claim key", "claim value"));
-        let js_map_wasm: JsHashMapStringString = JsHashMapStringString::from(js_map);
-        assert_eq!(js_map_wasm, js_hash_map)
+    fn parse_access_token() {
+        let _: TokenHashMap = accessToken.clone().into();
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_id_token() {
+        let _: TokenHashMap = idToken.clone().into();
     }
 }
