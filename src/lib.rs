@@ -2,9 +2,6 @@
 // create a builder pattern
 
 // TODO: Since working with WASM, use String over &str?
-// TODO: Maybe split to features: Popup and Redirect? Since should use one or the other
-// TODO: Build script that runs tests, and copies current msal-browser files to root?
-// TODO: Test for each type going WASM -> JS -> WASM; then JSON?
 mod msal;
 
 #[cfg(feature = "popup")]
@@ -17,7 +14,7 @@ use js_sys::{Array, Date, Object};
 use msal::{JsArrayString, JsMirror};
 use requests::*;
 use std::{collections::HashMap, convert::TryFrom};
-use wasm_bindgen::{JsCast, JsStatic, JsValue};
+use wasm_bindgen::{JsCast, JsValue};
 
 pub struct BrowserAuthOptions {
     client_id: String,

@@ -22,7 +22,7 @@ use crate::TokenValue;
 use js_sys::{Array, Date, JsString, Map, Object};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::{JsCast};
+use wasm_bindgen::JsCast;
 
 pub trait JsMirror: std::marker::Sized {
     // TODO: Toggle this on
@@ -152,8 +152,20 @@ extern "C" {
     #[wasm_bindgen(constructor)]
     pub fn new(scopes: &Array, account: AccountInfo) -> SilentRequest;
 
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn scopes(request: &SilentRequest) -> Array;
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn account(request: &SilentRequest) -> AccountInfo;
+
     #[wasm_bindgen(method, setter)]
     pub fn set_authority(request: &SilentRequest, authority: String);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn authority(request: &SilentRequest) -> Option<String>;
 
     #[wasm_bindgen(method, setter, js_name = correlationId)]
     pub fn set_correlation_id(request: &SilentRequest, correlation_id: String);
@@ -164,8 +176,16 @@ extern "C" {
     #[wasm_bindgen(method, setter, js_name = forceRefresh)]
     pub fn set_force_refresh(request: &SilentRequest, force_refresh: bool);
 
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter, js_name = forceRefresh)]
+    pub fn force_refresh(request: &SilentRequest) -> Option<bool>;
+
     #[wasm_bindgen(method, setter, js_name = redirectUri)]
     pub fn set_redirect_uri(request: &SilentRequest, redirectUri: String);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter, js_name = redirectUri)]
+    pub fn redirect_uri(request: &SilentRequest,) -> Option<String>;
 
 }
 
@@ -333,11 +353,7 @@ impl From<Array> for JsArrayString {
 
 impl From<JsArrayString> for Array {
     fn from(js_array_string: JsArrayString) -> Self {
-        js_array_string
-            .0
-            .into_iter()
-            .map(JsValue::from)
-            .collect()
+        js_array_string.0.into_iter().map(JsValue::from).collect()
     }
 }
 
@@ -347,6 +363,7 @@ pub(crate) struct TokenHashMap(pub HashMap<String, TokenValue>);
 impl From<Object> for TokenHashMap {
     fn from(js_obj: Object) -> Self {
         let mut hm = HashMap::new();
+        // TODO: Tried with .entries, but then how to get the key / value out?
         let keys: Array = js_sys::Object::keys(&js_obj);
         let values: Array = js_sys::Object::values(&js_obj);
         keys.for_each(&mut |k, i, _| {
@@ -377,7 +394,6 @@ impl From<TokenHashMap> for Map {
         }
         js_map
     }
-    
 }
 
 #[cfg(test)]

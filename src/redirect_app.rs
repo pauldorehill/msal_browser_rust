@@ -98,7 +98,7 @@ mod tests {
     
     const CLIENT_ID: &str = "MY_CLIENT_ID";
     const AUTHORITY: &str = "MY_AUTHORITY";
-    const REDIRECT_URI: &str = "MY_REDIRECT_URI";
+    // const REDIRECT_URI: &str = "MY_REDIRECT_URI";
 
     #[allow(unused_must_use)]
     #[wasm_bindgen_test]

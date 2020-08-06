@@ -82,6 +82,7 @@ impl From<&str> for BaseAuthRequest {
         vec![scope.to_string()].into()
     }
 }
+#[allow(dead_code)]
 pub struct AuthorizationUrlRequest {
     base_request: BaseAuthRequest,
     redirect_uri: Option<String>,
@@ -182,7 +183,7 @@ impl From<BaseAuthRequest> for AuthorizationUrlRequest {
         }
     }
 }
-
+#[allow(dead_code)]
 #[cfg(feature = "redirect")]
 pub struct RedirectRequest {
     auth_url_req: AuthorizationUrlRequest,
@@ -239,7 +240,7 @@ impl From<RedirectRequest> for msal::RedirectRequest {
 #[derive(Clone)]
 pub struct SilentRequest {
     base_request: BaseAuthRequest,
-    pub account: AccountInfo,
+    account: AccountInfo,
     force_refresh: Option<bool>,
     redirect_uri: Option<String>,
 }
@@ -340,7 +341,7 @@ mod test_request {
     fn mirror_auth_url_request() {
         // TODO
     }
-    
+
     #[wasm_bindgen_test]
     fn mirror_end_session_request() {
         // TODO
@@ -372,8 +373,37 @@ mod test_request {
 
         // TODO: Finish testing all (i've checked in browser)
         assert_eq!(
+            silent_req.base_request.scopes,
+            JsArrayString::from(js_silent_req.scopes()).0
+        );
+        assert_eq!(
             silent_req.base_request.correlation_id,
             js_silent_req.correlation_id()
-        )
+        );
+        assert_eq!(silent_req.base_request.authority, js_silent_req.authority());
+        assert_eq!(
+            silent_req.account.home_account_id,
+            js_silent_req.account().home_account_id()
+        );
+        assert_eq!(
+            silent_req.account.environment,
+            js_silent_req.account().environment()
+        );
+        assert_eq!(
+            silent_req.account.tenant_id,
+            js_silent_req.account().tenant_id()
+        );
+        assert_eq!(
+            silent_req.account.username,
+            js_silent_req.account().username()
+        );
+        assert_eq!(
+            silent_req.force_refresh,
+            js_silent_req.force_refresh()
+        );
+        assert_eq!(
+            silent_req.redirect_uri,
+            js_silent_req.redirect_uri()
+        );
     }
 }
