@@ -149,10 +149,13 @@ impl From<&str> for Configuration {
 }
 
 // TODO: Should this move to an enum of all claims? Access & Id, how to handle optional / custom?
-// https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
+// https://docs.microsoft.com/en-us/azure/active-directory/develop/access-tokens
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-optional-claims#configuring-directory-extension-optional-claims
-#[derive(Clone, PartialEq)]
+// https://tools.ietf.org/html/rfc7519#section-4.1
+// https://tools.ietf.org/html/rfc7515
+// https://www.iana.org/assignments/jwt/jwt.xhtml#claims
+#[derive(Clone, PartialEq, Debug)]
 pub enum TokenValue {
     String(String),
     Float(f64),

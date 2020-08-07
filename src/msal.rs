@@ -369,20 +369,18 @@ pub(crate) struct TokenHashMap(pub HashMap<String, TokenValue>);
 impl From<Object> for TokenHashMap {
     fn from(js_obj: Object) -> Self {
         let mut hm = HashMap::new();
-        // TODO: Tried with .entries, but then how to get the key / value out?
-        let keys: Array = js_sys::Object::keys(&js_obj);
-        let values: Array = js_sys::Object::values(&js_obj);
-        keys.for_each(&mut |k, i, _| {
-            let v = {
-                let v = values.get(i);
+        js_sys::Object::entries(&js_obj).for_each(&mut |v, _, _| {
+            let kv = v.unchecked_into::<Array>();
+            // Returned keys are always strings
+            let key = kv.get(0).unchecked_into::<JsString>().into();
+            let value = {
+                let v = kv.get(1);
                 match v.as_string() {
                     Some(s) => TokenValue::String(s),
                     None => TokenValue::Float(v.as_f64().unwrap()),
                 }
             };
-            // Returned keys are always strings
-            let k = k.unchecked_into::<JsString>().into();
-            hm.insert(k, v);
+            hm.insert(key, value);
         });
         TokenHashMap(hm)
     }
@@ -423,5 +421,11 @@ mod tests {
     #[wasm_bindgen_test]
     fn parse_id_token() {
         let _: TokenHashMap = idToken.clone().into();
+    }
+
+    #[wasm_bindgen_test]
+    fn test_parsing_key_values() {
+        let hm: TokenHashMap = idToken.clone().into();
+        assert_eq!(hm.0.get("typ").unwrap(), &TokenValue::String("JWT".into()))
     }
 }
