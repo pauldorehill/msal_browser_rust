@@ -9,7 +9,7 @@ Methods names all match the `js` but with snake case, but unlike the `js` that e
 The `PopupApp` is a the default feature: if you want to use the `RedirectApp` it is behind the `redirect` feature:
 
 ```rust
-msal_browser = { version = "0.1.4", features = ["redirect"] }
+msal_browser = { version = "0.1", features = ["redirect"] }
 ```
 
 There are a huge amount of [`Configuration`](https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md) options so the rust side uses a builder pattern. 

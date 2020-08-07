@@ -1,6 +1,6 @@
 //! msal-browser.js in Rust WASM
 mod msal;
-// TODO: Since working with WASM, I used String - use &str?
+// TODO: Since working with WASM, I used String - use &str and look at Cow
 
 #[cfg(feature = "popup")]
 pub mod popup_app;
@@ -36,7 +36,7 @@ impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
     fn from(auth_options: BrowserAuthOptions) -> Self {
         let auth = msal::BrowserAuthOptions::new(&auth_options.client_id);
         auth_options.authority.iter().for_each(|a| {
-            auth.set_authority(&a);
+            auth.set_authority(a);
         });
         auth_options.redirect_uri.iter().for_each(|uri| {
             auth.set_redirect_uri(uri);
@@ -86,10 +86,62 @@ impl From<&str> for BrowserAuthOptions {
     }
 }
 
+pub enum CacheLocation {
+    Session,
+    Local,
+}
+
+impl std::fmt::Display for CacheLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            CacheLocation::Session => f.write_str("sessionStorage"),
+            CacheLocation::Local => f.write_str("localStorage"),
+        }
+    }
+}
+
+//TODO: Change to builder?
+#[derive(Default)]
+pub struct CacheOptions {
+    cache_location: Option<CacheLocation>,
+    store_auth_state_in_cookie: Option<bool>,
+}
+
+impl CacheOptions {
+    pub fn new(
+        cache_location: Option<CacheLocation>,
+        store_auth_state_in_cookie: Option<bool>,
+    ) -> Self {
+        Self {
+            cache_location,
+            store_auth_state_in_cookie,
+        }
+    }
+}
+
+impl JsMirror for CacheOptions {
+    type JsTarget = msal::CacheOptions;
+}
+
+impl From<CacheOptions> for msal::CacheOptions {
+    fn from(cache_options: CacheOptions) -> Self {
+        let cache = msal::CacheOptions::new();
+        cache_options
+            .cache_location
+            .iter()
+            .for_each(|v| cache.set_cache_location(v.to_string()));
+        cache_options
+            .store_auth_state_in_cookie
+            .iter()
+            .for_each(|v| cache.set_store_auth_state_in_cookie(*v));
+        cache
+    }
+}
+
 // TODO: Add in all fields
 pub struct Configuration {
     auth: BrowserAuthOptions,
-    // cache: Option<CacheOptions>,
+    cache: Option<CacheOptions>,
     // system: Option<BrowserSystemOptions>,
 }
 
@@ -107,6 +159,7 @@ impl From<msal::Configuration> for Configuration {
     fn from(config: msal::Configuration) -> Self {
         Self {
             auth: config.auth().into(),
+            cache: None,
         }
     }
 }
@@ -135,6 +188,7 @@ impl From<BrowserAuthOptions> for Configuration {
     fn from(browser_auth_options: BrowserAuthOptions) -> Self {
         Self {
             auth: browser_auth_options,
+            cache: None,
         }
     }
 }
@@ -227,6 +281,12 @@ pub enum TokenClaim {
     rh(String),
     scp(String),
     uti(String),
+    appid(String),
+    roles(Array),
+    wids(Array),
+    // TODO: groups:src1 // _claim_sources?
+    groups(Array),
+    hasgroups(bool),
     custom(String, JsValue),
 }
 
@@ -235,7 +295,7 @@ impl From<JsValue> for TokenClaim {
         let kv = js_value.unchecked_into::<Array>();
         let value = kv.get(1);
         let key: String = kv.get(0).as_string().unwrap();
-
+        // Would like to close over key and value, but can't since the closure takes ownership
         let make_string = |f: &dyn Fn(String) -> Self, key, value: JsValue| match value.as_string()
         {
             None => Self::custom(key, value),
@@ -249,6 +309,10 @@ impl From<JsValue> for TokenClaim {
             None => Self::custom(key, value),
             Some(value) => f(value),
         };
+        let make_array = |f: &dyn Fn(Array) -> Self, key, value: JsValue| match value.dyn_into() {
+            Err(value) => Self::custom(key, value),
+            Ok(value) => f(value),
+        };
         let make_object = |f: &dyn Fn(Object) -> Self, key, value: JsValue| {
             if value.is_object() {
                 f(value.unchecked_into())
@@ -258,6 +322,7 @@ impl From<JsValue> for TokenClaim {
         };
 
         // Returned keys are always strings
+        // TODO: Could a macro be used here?
         match key.as_str() {
             "typ" => Self::typ, // Always JWT
             "nonce" => make_string(&Self::nonce, key, value),
@@ -327,11 +392,17 @@ impl From<JsValue> for TokenClaim {
             "rh" => make_string(&Self::rh, key, value),
             "scp" => make_string(&Self::scp, key, value),
             "uti" => make_string(&Self::uti, key, value),
+            "appid" => make_string(&Self::appid, key, value),
+            "roles" => make_array(&Self::roles, key, value),
+            "wids" => make_array(&Self::wids, key, value),
+            "groups" => make_array(&Self::groups, key, value),
+            "hasgroups" => make_bool(&Self::hasgroups, key, value),
             _ => Self::custom(key, value),
         }
     }
 }
 
+// TODO: Vec or Set on claim? the stand says the are unique
 pub struct TokenClaims(pub Vec<TokenClaim>);
 
 impl From<Object> for TokenClaims {
@@ -344,7 +415,6 @@ impl From<Object> for TokenClaims {
 
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
-// TODO: Vec or Set on claim? the stand says the are unique
 pub struct AuthenticationResult {
     pub unique_id: String,
     pub tenant_id: String,
@@ -516,6 +586,12 @@ mod tests {
     pub const CORRELATION_ID: &str = "correlation_id";
     pub const POST_LOGOUT_URI: &str = "correlation_id";
 
+    #[wasm_bindgen(module = "/msal-object-examples.js")]
+    extern "C" {
+        static authResponse: Object;
+        static msalConfig: Object;
+    }
+
     fn home_account_id(i: usize) -> String {
         format!("home_account_id_{}", i)
     }
@@ -586,12 +662,6 @@ mod tests {
         }
     }
 
-    #[wasm_bindgen(module = "/msal-object-examples.js")]
-    extern "C" {
-        static authResponse: Object;
-        static msalConfig: Object;
-    }
-
     #[wasm_bindgen_test]
     fn parse_authentication_result() {
         let _: AuthenticationResult = authResponse
@@ -606,12 +676,17 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn mirror_configuration() {
+    fn mirror_cache_options() {
         // TODO: Write tests
     }
 
     #[wasm_bindgen_test]
     fn mirror_browser_auth_options() {
+        // TODO: Write tests
+    }
+
+    #[wasm_bindgen_test]
+    fn mirror_configuration() {
         // TODO: Write tests
     }
 }

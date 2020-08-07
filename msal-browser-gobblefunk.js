@@ -7,6 +7,11 @@ export class BrowserAuthOptions {
     }
 }
 
+export class CacheOptions {
+    cacheLocation;
+    storeAuthStateInCookie;
+}
+
 /**
  * @param {BrowserAuthOptions} browserAuthOptions
  */

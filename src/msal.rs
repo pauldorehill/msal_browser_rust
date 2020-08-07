@@ -51,6 +51,25 @@ extern "C" {
     #[wasm_bindgen(method, getter = redirectUri)]
     pub fn redirect_uri(this: &BrowserAuthOptions) -> Option<String>;
 
+    pub type CacheOptions;
+
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> CacheOptions;
+
+    #[wasm_bindgen(method, setter = cacheLocation)]
+    pub fn set_cache_location(this: &CacheOptions, cache_location: String);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, setter = cacheLocation)]
+    pub fn cache_location(this: &CacheOptions) -> Option<String>;
+
+    #[wasm_bindgen(method, setter = storeAuthStateInCookie)]
+    pub fn set_store_auth_state_in_cookie(this: &CacheOptions, store_auth_state_in_cookie: bool);
+    
+    #[cfg(test)]
+    #[wasm_bindgen(method, setter = storeAuthStateInCookie)]
+    pub fn store_auth_state_in_cookie(this: &CacheOptions) -> Option<bool>;
+
     // file://./../node_modules/@azure/msal-browser/dist/src/config/Configuration.d.ts
     pub type Configuration;
 
@@ -373,6 +392,7 @@ mod tests {
     extern "C" {
         static accessToken: Object;
         static idToken: Object;
+        static completeToken: Object;
     }
 
     #[wasm_bindgen_test]
@@ -405,8 +425,12 @@ mod tests {
                 None
             }
         });
+        
+        let all: TokenClaims = completeToken.clone().into();
+
         // Check have found all azure claims, the source may not have them all though!
         assert!(no_custom(id_claims).is_none());
-        assert!(no_custom(access_claims).is_none())
+        assert!(no_custom(access_claims).is_none());
+        assert!(no_custom(all).is_none());
     }
 }

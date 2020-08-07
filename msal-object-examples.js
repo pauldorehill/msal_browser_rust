@@ -15,8 +15,8 @@ const msalConfig = {
     auth: {
         clientId: "enter_client_id_here",
         authority: "https://login.microsoftonline.com/common",
-        knownAuthorities: [],
-        cloudDiscoveryMetadata: "",
+        knownAuthorities: ["a", "b"],
+        cloudDiscoveryMetadata: "cloudDiscoveryMetadata",
         redirectUri: "enter_redirect_uri_here",
         postLogoutRedirectUri: "enter_postlogout_uri_here",
         navigateToLoginRequestUrl: true
@@ -59,28 +59,6 @@ const msalConfig = {
     },
 }
 
-// https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/request-response-object.md
-const authResponse = {
-    uniqueId: "uniqueId",
-    tenantId: "tenantId",
-    scopes: ["scopes"],
-    account: {
-        homeAccountId: "homeAccountId",
-        environment: "environment",
-        tenantId: "tenantId",
-        username: "username",
-    },
-    idToken: "idToken",
-    //file://./../node_modules/@azure/msal-common/dist/src/utils/MsalTypes.d.ts
-    idTokenClaims: { "typ": "JWT", },
-    accessToken: "accessToken",
-    fromCache: true,
-    expiresOn: "Thu Aug 06 2020 10:35:12 GMT+1000 (Australian Eastern Standard Time)",
-    extExpiresOn: "Thu Aug 06 2020 10:35:12 GMT+1000 (Australian Eastern Standard Time)",
-    state: "state",
-    familyId: "familyId",
-}
-
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/access-tokens
 const accessToken = {
     "typ": "JWT",
@@ -102,7 +80,14 @@ const accessToken = {
     "sub": "HKZpfaHyWadeOouYlitjrI-KffTm222X5rrV3xDqfKQ",
     "tid": "72f988bf-86f1-41af-91ab-2d7cd011db47",
     "uti": "fqiBqXLPj0eQa82S-IYFAA",
-    "ver": "2.0"
+    "ver": "2.0",
+    // Extras added
+    "idp": "idp",
+    "appid": "app_id",
+    "roles": ["roles"],
+    "wids": ["wids"],
+    "groups": ["groups"],
+    "hasgroups": true,
 }
 
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
@@ -125,4 +110,100 @@ const idToken = {
     "aio": "Df2UVXL1ix!lMCWMSOJBcFatzcGfvFGhjKv8q5g0x732dR5MB5BisvGQO7YWByjd8iQDLq!eGbIDakyp5mnOrcdqHeYSnltepQmRp6AIZ8jY"
 }
 
-export { msalConfig, authResponse, accessToken, idToken }
+// https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/request-response-object.md
+const authResponse = {
+    uniqueId: "uniqueId",
+    tenantId: "tenantId",
+    scopes: ["scopes"],
+    account: {
+        homeAccountId: "homeAccountId",
+        environment: "environment",
+        tenantId: "tenantId",
+        username: "username",
+    },
+    idToken: "idToken",
+    idTokenClaims: idToken,
+    accessToken: "accessToken",
+    fromCache: true,
+    expiresOn: "Thu Aug 06 2020 10:35:12 GMT+1000 (Australian Eastern Standard Time)",
+    extExpiresOn: "Thu Aug 06 2020 10:35:12 GMT+1000 (Australian Eastern Standard Time)",
+    state: "state",
+    familyId: "familyId",
+}
+
+const completeToken = {
+    typ: "typ",
+    nonce: "nonce",
+    alg: "alg",
+    kid: "kid",
+    x5t: "x5t",
+    iss: "iss",
+    sub: "sub",
+    aud: "aud",
+    exp: 13,
+    nbf: 13,
+    iat: 13,
+    jti: "jti",
+    name: "name",
+    given_name: "given_name",
+    family_name: "family_name",
+    middle_name: "middle_name",
+    nickname: "nickname",
+    preferred_username: "preferred_username",
+    profile: "profile",
+    picture: "picture",
+    website: "website",
+    email: "email",
+    email_verified: true,
+    gender: "gender",
+    birthdate: "birthdate",
+    zoneinfo: "zoneinfo",
+    locale: "locale",
+    phone_number: "phone_number",
+    phone_number_verified: true,
+    address: {},
+    updated_at: 13,
+    cnf: {},
+    sip_from_tag: "sip_from_tag",
+    sip_date: 13,
+    sip_callid: "sip_callid",
+    sip_cseq_num: "sip_cseq_num",
+    sip_via_branch: "sip_via_branch",
+    orig: {},
+    dest: {},
+    mky: {},
+    events: {},
+    toe: 13,
+    txn: "txn",
+    rph: {},
+    sid: "sid",
+    vot: "vot",
+    vtm: "vtm",
+    attest: "attest",
+    origid: "origid",
+    act: {},
+    scope: "scope",
+    client_id: "client_id",
+    may_act: {},
+    jcard: {},
+    at_use_nbr: 13,
+    div: {},
+    opt: "opt",
+    idp: "idp",
+    ver: "ver",
+    oid: "oid",
+    tid: "tid",
+    aio: "aio",
+    azp: "azp",
+    azpacr: "azpacr",
+    rh: "rh",
+    scp: "scp",
+    uti: "uti",
+    appid: "appid",
+    roles: [],
+    wids: [],
+    groups: [],
+    hasgroups: true,
+}
+
+export { msalConfig, authResponse, accessToken, idToken, completeToken }
