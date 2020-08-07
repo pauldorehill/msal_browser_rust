@@ -18,9 +18,7 @@
 //! exports.PublicClientApplication = PublicClientApplication;
 //! ```
 
-use crate::TokenValue;
-use js_sys::{Array, Date, JsString, Map, Object};
-use std::collections::HashMap;
+use js_sys::{Array, Date, JsString, Object};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
@@ -193,7 +191,7 @@ extern "C" {
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = redirectUri)]
-    pub fn redirect_uri(request: &SilentRequest,) -> Option<String>;
+    pub fn redirect_uri(request: &SilentRequest) -> Option<String>;
 
 }
 
@@ -363,48 +361,12 @@ impl From<JsArrayString> for Array {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct TokenHashMap(pub HashMap<String, TokenValue>);
-
-impl From<Object> for TokenHashMap {
-    fn from(js_obj: Object) -> Self {
-        let mut hm = HashMap::new();
-        js_sys::Object::entries(&js_obj).for_each(&mut |v, _, _| {
-            let kv = v.unchecked_into::<Array>();
-            // Returned keys are always strings
-            let key = kv.get(0).unchecked_into::<JsString>().into();
-            let value = {
-                let v = kv.get(1);
-                match v.as_string() {
-                    Some(s) => TokenValue::String(s),
-                    None => TokenValue::Float(v.as_f64().unwrap()),
-                }
-            };
-            hm.insert(key, value);
-        });
-        TokenHashMap(hm)
-    }
-}
-
-impl From<TokenHashMap> for Map {
-    fn from(map: TokenHashMap) -> Self {
-        let js_map = Map::new();
-        for (k, v) in map.0 {
-            let v = match v {
-                TokenValue::String(s) => s.into(),
-                TokenValue::Float(f) => f.into(),
-            };
-            js_map.set(&k.into(), &v);
-        }
-        js_map
-    }
-}
-
 #[cfg(test)]
 mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;
+    use crate::{TokenClaim, TokenClaims};
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen(module = "/msal-object-examples.js")]
@@ -415,17 +377,36 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn parse_access_token() {
-        let _: TokenHashMap = accessToken.clone().into();
+        let _: TokenClaims = accessToken.clone().into();
     }
 
     #[wasm_bindgen_test]
     fn parse_id_token() {
-        let _: TokenHashMap = idToken.clone().into();
+        let _: TokenClaims = idToken.clone().into();
     }
 
     #[wasm_bindgen_test]
-    fn test_parsing_key_values() {
-        let hm: TokenHashMap = idToken.clone().into();
-        assert_eq!(hm.0.get("typ").unwrap(), &TokenValue::String("JWT".into()))
+    fn parse_claims() {
+        let id_claims: TokenClaims = idToken.clone().into();
+        let access_claims: TokenClaims = accessToken.clone().into();
+        let claim = id_claims.0.iter().find_map(|v| {
+            if let TokenClaim::alg(c) = v {
+                Some(c)
+            } else {
+                None
+            }
+        }).unwrap();
+        assert_eq!(claim, "RS256");
+
+        let no_custom = |claims: TokenClaims| claims.0.into_iter().find_map(|v| {
+            if let TokenClaim::custom(c, v) = v {
+                Some((c, v))
+            } else {
+                None
+            }
+        });
+        // Check have found all azure claims, the source may not have them all though!
+        assert!(no_custom(id_claims).is_none());
+        assert!(no_custom(access_claims).is_none())
     }
 }

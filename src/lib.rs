@@ -1,8 +1,6 @@
 //! msal-browser.js in Rust WASM
-
 mod msal;
 // TODO: Since working with WASM, I used String - use &str?
-// TODO: doc build for all features
 
 #[cfg(feature = "popup")]
 pub mod popup_app;
@@ -13,7 +11,7 @@ pub mod requests;
 use js_sys::{Array, Date, Object};
 use msal::{JsArrayString, JsMirror};
 use requests::*;
-use std::{collections::HashMap, convert::TryFrom};
+use std::convert::TryFrom;
 use wasm_bindgen::{JsCast, JsValue};
 
 // TODO: Is this worth it? May 'leak' but avoids allocation
@@ -148,28 +146,212 @@ impl From<&str> for Configuration {
     }
 }
 
-// TODO: Should this move to an enum of all claims? Access & Id, how to handle optional / custom?
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/access-tokens
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-optional-claims#configuring-directory-extension-optional-claims
 // https://tools.ietf.org/html/rfc7519#section-4.1
 // https://tools.ietf.org/html/rfc7515
 // https://www.iana.org/assignments/jwt/jwt.xhtml#claims
+// TODO: get all the azure claims / put in own enum?
+/// Covers all the claims as per the  IETF spec. If the claim doesn't match any of the standard ones
+/// it will return `Custom::(claim_name, claim_value)`
+/// Adds the azure specific ones too
 #[derive(Clone, PartialEq, Debug)]
-pub enum TokenValue {
-    String(String),
-    Float(f64),
+#[allow(non_camel_case_types)]
+pub enum TokenClaim {
+    typ, // Always JWT
+    nonce(String),
+    alg(String),
+    kid(String),
+    x5t(String),
+    iss(String),
+    sub(String),
+    aud(String),
+    exp(f64),
+    nbf(f64),
+    iat(f64),
+    jti(String),
+    name(String),
+    given_name(String),
+    family_name(String),
+    middle_name(String),
+    nickname(String),
+    preferred_username(String),
+    profile(String),
+    picture(String),
+    website(String),
+    email(String),
+    email_verified(bool),
+    gender(String),
+    birthdate(String),
+    zoneinfo(String),
+    locale(String),
+    phone_number(String),
+    phone_number_verified(bool),
+    address(Object),
+    updated_at(f64),
+    cnf(Object),
+    sip_from_tag(String),
+    sip_date(f64),
+    sip_callid(String),
+    sip_cseq_num(String),
+    sip_via_branch(String),
+    orig(Object),
+    dest(Object),
+    mky(Object),
+    events(Object),
+    toe(f64),
+    txn(String),
+    rph(Object),
+    sid(String),
+    vot(String),
+    vtm(String),
+    attest(String),
+    origid(String),
+    act(Object),
+    scope(String),
+    client_id(String),
+    may_act(Object),
+    jcard(Object),
+    at_use_nbr(f64),
+    div(Object),
+    opt(String),
+    // Azure custom
+    idp(String),
+    ver(String),
+    oid(String),
+    tid(String),
+    aio(String),
+    azp(String),
+    azpacr(String),
+    rh(String),
+    scp(String),
+    uti(String),
+    custom(String, JsValue),
+}
+
+impl From<JsValue> for TokenClaim {
+    fn from(js_value: JsValue) -> Self {
+        let kv = js_value.unchecked_into::<Array>();
+        let value = kv.get(1);
+        let key: String = kv.get(0).as_string().unwrap();
+
+        let make_string = |f: &dyn Fn(String) -> Self, key, value: JsValue| match value.as_string()
+        {
+            None => Self::custom(key, value),
+            Some(value) => f(value),
+        };
+        let make_f64 = |f: &dyn Fn(f64) -> Self, key, value: JsValue| match value.as_f64() {
+            None => Self::custom(key, value),
+            Some(value) => f(value.to_owned()),
+        };
+        let make_bool = |f: &dyn Fn(bool) -> Self, key, value: JsValue| match value.as_bool() {
+            None => Self::custom(key, value),
+            Some(value) => f(value),
+        };
+        let make_object = |f: &dyn Fn(Object) -> Self, key, value: JsValue| {
+            if value.is_object() {
+                f(value.unchecked_into())
+            } else {
+                Self::custom(key, value)
+            }
+        };
+
+        // Returned keys are always strings
+        match key.as_str() {
+            "typ" => Self::typ, // Always JWT
+            "nonce" => make_string(&Self::nonce, key, value),
+            "alg" => make_string(&Self::alg, key, value),
+            "kid" => make_string(&Self::kid, key, value),
+            "x5t" => make_string(&Self::x5t, key, value),
+            "iss" => make_string(&Self::iss, key, value),
+            "sub" => make_string(&Self::sub, key, value),
+            "aud" => make_string(&Self::aud, key, value),
+            "exp" => make_f64(&Self::exp, key, value),
+            "nbf" => make_f64(&Self::nbf, key, value),
+            "iat" => make_f64(&Self::iat, key, value),
+            "jti" => make_string(&Self::jti, key, value),
+            "name" => make_string(&Self::name, key, value),
+            "given_name" => make_string(&Self::given_name, key, value),
+            "family_name" => make_string(&Self::family_name, key, value),
+            "middle_name" => make_string(&Self::middle_name, key, value),
+            "nickname" => make_string(&Self::nickname, key, value),
+            "preferred_username" => make_string(&Self::preferred_username, key, value),
+            "profile" => make_string(&Self::profile, key, value),
+            "picture" => make_string(&Self::picture, key, value),
+            "website" => make_string(&Self::website, key, value),
+            "email" => make_string(&Self::email, key, value),
+            "email_verified" => make_bool(&Self::email_verified, key, value),
+            "gender" => make_string(&Self::gender, key, value),
+            "birthdate" => make_string(&Self::birthdate, key, value),
+            "zoneinfo" => make_string(&Self::zoneinfo, key, value),
+            "locale" => make_string(&Self::locale, key, value),
+            "phone_number" => make_string(&Self::phone_number, key, value),
+            "phone_number_verified" => make_bool(&Self::phone_number_verified, key, value),
+            "address" => make_object(&Self::address, key, value),
+            "updated_at" => make_f64(&Self::updated_at, key, value),
+            "cnf" => make_object(&Self::cnf, key, value),
+            "sip_from_tag" => make_string(&Self::sip_from_tag, key, value),
+            "sip_date" => make_f64(&Self::sip_date, key, value),
+            "sip_callid" => make_string(&Self::sip_callid, key, value),
+            "sip_cseq_num" => make_string(&Self::sip_cseq_num, key, value),
+            "sip_via_branch" => make_string(&Self::sip_via_branch, key, value),
+            "orig" => make_object(&Self::orig, key, value),
+            "dest" => make_object(&Self::dest, key, value),
+            "mky" => make_object(&Self::mky, key, value),
+            "events" => make_object(&Self::events, key, value),
+            "toe" => make_f64(&Self::toe, key, value),
+            "txn" => make_string(&Self::txn, key, value),
+            "rph" => make_object(&Self::rph, key, value),
+            "sid" => make_string(&Self::sid, key, value),
+            "vot" => make_string(&Self::vot, key, value),
+            "vtm" => make_string(&Self::vtm, key, value),
+            "attest" => make_string(&Self::attest, key, value),
+            "origid" => make_string(&Self::origid, key, value),
+            "act" => make_object(&Self::act, key, value),
+            "scope" => make_string(&Self::scope, key, value),
+            "client_id" => make_string(&Self::client_id, key, value),
+            "may_act" => make_object(&Self::may_act, key, value),
+            "jcard" => make_object(&Self::jcard, key, value),
+            "at_use_nbr" => make_f64(&Self::at_use_nbr, key, value),
+            "div" => make_object(&Self::div, key, value),
+            "opt" => make_string(&Self::opt, key, value),
+            // Azure
+            "idp" => make_string(&Self::idp, key, value),
+            "ver" => make_string(&Self::ver, key, value),
+            "oid" => make_string(&Self::oid, key, value),
+            "tid" => make_string(&Self::tid, key, value),
+            "aio" => make_string(&Self::aio, key, value),
+            "azp" => make_string(&Self::azp, key, value),
+            "azpacr" => make_string(&Self::azpacr, key, value),
+            "rh" => make_string(&Self::rh, key, value),
+            "scp" => make_string(&Self::scp, key, value),
+            "uti" => make_string(&Self::uti, key, value),
+            _ => Self::custom(key, value),
+        }
+    }
+}
+
+pub struct TokenClaims(pub Vec<TokenClaim>);
+
+impl From<Object> for TokenClaims {
+    fn from(js_obj: Object) -> Self {
+        let mut claims = Vec::new();
+        js_sys::Object::entries(&js_obj).for_each(&mut |v, _, _| claims.push(v.into()));
+        Self(claims)
+    }
 }
 
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
+// TODO: Vec or Set on claim? the stand says the are unique
 pub struct AuthenticationResult {
     pub unique_id: String,
     pub tenant_id: String,
     pub scopes: Vec<String>,
     pub account: AccountInfo,
     pub id_token: String,
-    pub id_token_claims: HashMap<String, TokenValue>,
+    pub id_token_claims: TokenClaims,
     pub access_token: String,
     pub from_cache: bool,
     pub expires_on: Date,
@@ -186,7 +368,7 @@ impl From<msal::AuthenticationResult> for AuthenticationResult {
             scopes: JsArrayString::from(auth_result.scopes()).0,
             account: auth_result.account().into(),
             id_token: auth_result.id_token(),
-            id_token_claims: msal::TokenHashMap::from(auth_result.id_token_claims()).0,
+            id_token_claims: auth_result.id_token_claims().into(),
             access_token: auth_result.access_token(),
             from_cache: auth_result.from_cache(),
             expires_on: auth_result.expires_on(),
