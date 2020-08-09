@@ -1,6 +1,5 @@
 //! msal-browser.js in Rust WASM
 mod msal;
-// TODO: Since working with WASM, I used String - use &str and look at Cow
 
 #[cfg(feature = "popup")]
 pub mod popup_app;
@@ -9,30 +8,19 @@ pub mod redirect_app;
 pub mod requests;
 
 use js_sys::{Array, Date, Object};
-use msal::{JsArrayString, JsMirror};
+use msal::JsArrayString;
 use requests::*;
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use wasm_bindgen::{JsCast, JsValue};
 
-// TODO: Is this worth it? May 'leak' but avoids allocation
-fn set_option_string(current_value: &mut Option<String>, new_value: &str) {
-    match current_value {
-        None => *current_value = Some(String::from(new_value)),
-        Some(s) => s.replace_range(.., new_value),
-    }
+pub struct BrowserAuthOptions<'a> {
+    client_id: Cow<'a, str>,
+    authority: Option<Cow<'a, str>>,
+    redirect_uri: Option<Cow<'a, str>>,
 }
 
-pub struct BrowserAuthOptions {
-    client_id: String,
-    authority: Option<String>,
-    redirect_uri: Option<String>,
-}
-
-impl JsMirror for BrowserAuthOptions {
-    type JsTarget = msal::BrowserAuthOptions;
-}
-
-impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
+impl<'a> From<BrowserAuthOptions<'a>> for msal::BrowserAuthOptions {
     fn from(auth_options: BrowserAuthOptions) -> Self {
         let auth = msal::BrowserAuthOptions::new(&auth_options.client_id);
         auth_options.authority.iter().for_each(|a| {
@@ -45,41 +33,56 @@ impl From<BrowserAuthOptions> for msal::BrowserAuthOptions {
     }
 }
 
-impl From<msal::BrowserAuthOptions> for BrowserAuthOptions {
+impl<'a> From<msal::BrowserAuthOptions> for BrowserAuthOptions<'a> {
     fn from(auth: msal::BrowserAuthOptions) -> Self {
         Self {
-            client_id: auth.client_id(),
-            authority: auth.authority(),
-            redirect_uri: auth.redirect_uri(),
+            client_id: Cow::from(auth.client_id()),
+            authority: auth.authority().map(Cow::from),
+            redirect_uri: auth.redirect_uri().map(Cow::from),
         }
     }
 }
 
-impl BrowserAuthOptions {
+impl<'a> BrowserAuthOptions<'a> {
     // Small strings so don't worry about 'leaked' memory on replace
-    fn ref_set_authority(&mut self, authority: &str) {
-        set_option_string(&mut self.authority, authority)
+    fn ref_set_authority<T>(&mut self, authority: T)
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.authority = Some(authority.into())
     }
 
-    pub fn set_authority(mut self, authority: &str) -> Self {
+    pub fn set_authority<T>(mut self, authority: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
         self.ref_set_authority(authority);
         self
     }
 
-    fn ref_set_redirect_uri(&mut self, redirect_uri: &str) {
-        set_option_string(&mut self.redirect_uri, redirect_uri)
+    fn ref_set_redirect_uri<T>(&mut self, redirect_uri: T)
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.redirect_uri = Some(redirect_uri.into());
     }
 
-    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
+    pub fn set_redirect_uri<T>(mut self, redirect_uri: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
         self.ref_set_redirect_uri(redirect_uri);
         self
     }
 }
 
-impl From<&str> for BrowserAuthOptions {
-    fn from(client_id: &str) -> Self {
+impl<'a, T> From<T> for BrowserAuthOptions<'a>
+where
+    T: Into<Cow<'a, str>>,
+{
+    fn from(client_id: T) -> Self {
         Self {
-            client_id: client_id.to_string(),
+            client_id: client_id.into(),
             authority: None,
             redirect_uri: None,
         }
@@ -91,15 +94,14 @@ pub enum CacheLocation {
     Local,
 }
 
-impl std::fmt::Display for CacheLocation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl CacheLocation {
+    fn as_str(&self) -> &str {
         match &self {
-            CacheLocation::Session => f.write_str("sessionStorage"),
-            CacheLocation::Local => f.write_str("localStorage"),
+            CacheLocation::Session => "sessionStorage",
+            CacheLocation::Local => "localStorage",
         }
     }
 }
-
 //TODO: Change to builder?
 #[derive(Default)]
 pub struct CacheOptions {
@@ -119,17 +121,13 @@ impl CacheOptions {
     }
 }
 
-impl JsMirror for CacheOptions {
-    type JsTarget = msal::CacheOptions;
-}
-
 impl From<CacheOptions> for msal::CacheOptions {
     fn from(cache_options: CacheOptions) -> Self {
         let cache = msal::CacheOptions::new();
         cache_options
             .cache_location
             .iter()
-            .for_each(|v| cache.set_cache_location(v.to_string()));
+            .for_each(|v| cache.set_cache_location(v.as_str()));
         cache_options
             .store_auth_state_in_cookie
             .iter()
@@ -139,23 +137,19 @@ impl From<CacheOptions> for msal::CacheOptions {
 }
 
 // TODO: Add in all fields
-pub struct Configuration {
-    auth: BrowserAuthOptions,
+pub struct Configuration<'a> {
+    auth: BrowserAuthOptions<'a>,
     cache: Option<CacheOptions>,
     // system: Option<BrowserSystemOptions>,
 }
 
-impl JsMirror for Configuration {
-    type JsTarget = msal::Configuration;
-}
-
-impl From<Configuration> for msal::Configuration {
+impl<'a> From<Configuration<'a>> for msal::Configuration {
     fn from(config: Configuration) -> Self {
         msal::Configuration::new(&config.auth.into())
     }
 }
 
-impl From<msal::Configuration> for Configuration {
+impl<'a> From<msal::Configuration> for Configuration<'a> {
     fn from(config: msal::Configuration) -> Self {
         Self {
             auth: config.auth().into(),
@@ -164,7 +158,7 @@ impl From<msal::Configuration> for Configuration {
     }
 }
 
-impl TryFrom<Object> for Configuration {
+impl<'a> TryFrom<Object> for Configuration<'a> {
     type Error = JsValue;
     fn try_from(js_obj: Object) -> Result<Self, Self::Error> {
         let v: Configuration = js_obj.unchecked_into::<msal::Configuration>().into();
@@ -172,20 +166,26 @@ impl TryFrom<Object> for Configuration {
     }
 }
 
-impl Configuration {
-    pub fn set_authority(mut self, authority: &str) -> Self {
+impl<'a> Configuration<'a> {
+    pub fn set_authority<T>(mut self, authority: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
         self.auth.ref_set_authority(authority);
         self
     }
 
-    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
+    pub fn set_redirect_uri<T>(mut self, redirect_uri: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
         self.auth.ref_set_redirect_uri(redirect_uri);
         self
     }
 }
 
-impl From<BrowserAuthOptions> for Configuration {
-    fn from(browser_auth_options: BrowserAuthOptions) -> Self {
+impl<'a> From<BrowserAuthOptions<'a>> for Configuration<'a> {
+    fn from(browser_auth_options: BrowserAuthOptions<'a>) -> Self {
         Self {
             auth: browser_auth_options,
             cache: None,
@@ -193,8 +193,8 @@ impl From<BrowserAuthOptions> for Configuration {
     }
 }
 
-impl From<&str> for Configuration {
-    fn from(client_id: &str) -> Self {
+impl<'a> From<&'a str> for Configuration<'a> {
+    fn from(client_id: &'a str) -> Self {
         let b: BrowserAuthOptions = client_id.into();
         b.into()
     }
@@ -267,7 +267,7 @@ pub enum TokenClaim {
     client_id(String),
     may_act(Object),
     jcard(Object),
-    at_use_nbr(f64),
+    at_use_nbr(f64), // Technically u32?
     div(Object),
     opt(String),
     // Azure custom
@@ -415,11 +415,11 @@ impl From<Object> for TokenClaims {
 
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
-pub struct AuthenticationResult {
+pub struct AuthenticationResult<'a> {
     pub unique_id: String,
     pub tenant_id: String,
     pub scopes: Vec<String>,
-    pub account: AccountInfo,
+    pub account: AccountInfo<'a>,
     pub id_token: String,
     pub id_token_claims: TokenClaims,
     pub access_token: String,
@@ -430,7 +430,7 @@ pub struct AuthenticationResult {
     pub family_id: Option<String>,
 }
 
-impl From<msal::AuthenticationResult> for AuthenticationResult {
+impl<'a> From<msal::AuthenticationResult> for AuthenticationResult<'a> {
     fn from(auth_result: msal::AuthenticationResult) -> Self {
         Self {
             unique_id: auth_result.unique_id(),
@@ -449,19 +449,13 @@ impl From<msal::AuthenticationResult> for AuthenticationResult {
     }
 }
 
-impl From<JsValue> for AuthenticationResult {
+impl<'a> From<JsValue> for AuthenticationResult<'a> {
     fn from(value: JsValue) -> Self {
         value.unchecked_into::<msal::AuthenticationResult>().into()
     }
 }
 
-pub trait PublicClientApplication {
-    fn auth(&self) -> &msal::PublicClientApplication;
-
-    fn empty_request() -> msal::AuthorizationUrlRequest {
-        msal::AuthorizationUrlRequest::new(&Array::new())
-    }
-
+pub trait PublicClientApplication: msal::Msal {
     fn client_id(&self) -> String {
         self.auth().config().auth().client_id()
     }
@@ -484,7 +478,7 @@ pub trait PublicClientApplication {
             .map(Into::into)
     }
 
-    fn logout(&self, request: Option<EndSessionRequest>) {
+    fn logout<'a>(&self, request: Option<EndSessionRequest<'a>>) {
         self.auth().logout(request.unwrap_or_default().into())
     }
 }
@@ -495,20 +489,20 @@ pub trait PublicClientApplication {
 
 // Silent login https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/login-user.md#silent-login-with-ssosilent
 // needs a login_hint, sid or account object on the request
-async fn sso_silent(
+async fn sso_silent<'a>(
     client_app: &msal::PublicClientApplication,
-    request: AuthorizationUrlRequest,
-) -> Result<AuthenticationResult, JsValue> {
+    request: AuthorizationUrlRequest<'a>,
+) -> Result<AuthenticationResult<'a>, JsValue> {
     client_app.sso_silent(request.into()).await.map(Into::into)
 }
 
 // Called by both popup and redirect
 // https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/acquire-token.md
 // Call this first, then if it fails will will need to call the interactive methods
-async fn acquire_token_silent(
+async fn acquire_token_silent<'a>(
     client_app: &msal::PublicClientApplication,
-    request: SilentRequest,
-) -> Result<AuthenticationResult, JsValue> {
+    request: &SilentRequest<'a>,
+) -> Result<AuthenticationResult<'a>, JsValue> {
     client_app
         .acquire_token_silent(request.into())
         .await
@@ -516,40 +510,37 @@ async fn acquire_token_silent(
 }
 
 #[derive(Clone)]
-pub struct AccountInfo {
-    pub home_account_id: String,
-    pub environment: String,
-    pub tenant_id: String,
-    pub username: String,
+pub struct AccountInfo<'a> {
+    home_account_id: Cow<'a, str>,
+    environment: Cow<'a, str>,
+    tenant_id: Cow<'a, str>,
+    username: Cow<'a, str>,
 }
 
-impl JsMirror for AccountInfo {
-    type JsTarget = msal::AccountInfo;
-}
-
-impl From<msal::AccountInfo> for AccountInfo {
+impl From<msal::AccountInfo> for AccountInfo<'_> {
     fn from(account_info: msal::AccountInfo) -> Self {
         Self {
-            home_account_id: account_info.home_account_id(),
-            environment: account_info.environment(),
-            tenant_id: account_info.tenant_id(),
-            username: account_info.username(),
+            home_account_id: Cow::from(account_info.home_account_id()),
+            environment: Cow::from(account_info.environment()),
+            tenant_id: Cow::from(account_info.tenant_id()),
+            username: Cow::from(account_info.username()),
         }
     }
 }
 
-impl From<AccountInfo> for msal::AccountInfo {
-    fn from(account_info: AccountInfo) -> Self {
+impl<'a> From<&'a AccountInfo<'a>> for msal::AccountInfo {
+    fn from(account_info: &'a AccountInfo<'a>) -> Self {
+        let account_info = account_info.clone();
         msal::AccountInfo::new(
-            account_info.home_account_id,
-            account_info.environment,
-            account_info.tenant_id,
-            account_info.username,
+            account_info.home_account_id.into_owned(),
+            account_info.environment.into_owned(),
+            account_info.tenant_id.into_owned(),
+            account_info.username.into_owned(),
         )
     }
 }
 
-impl AccountInfo {
+impl AccountInfo<'_> {
     pub fn from_array(array: Array) -> Vec<Self> {
         array
             .iter()
@@ -605,12 +596,12 @@ mod tests {
         format!("username_{}", i)
     }
 
-    pub fn account() -> AccountInfo {
+    pub fn account() -> AccountInfo<'static> {
         AccountInfo {
-            home_account_id: HOME_ACCOUNT_ID.to_string(),
-            environment: ENVIRONMENT.to_string(),
-            tenant_id: TENANT_ID.to_string(),
-            username: USERNAME.to_string(),
+            home_account_id: Cow::from(HOME_ACCOUNT_ID),
+            environment: Cow::from(ENVIRONMENT),
+            tenant_id: Cow::from(TENANT_ID),
+            username: Cow::from(USERNAME),
         }
     }
 
@@ -636,12 +627,11 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn mirror_account_info() {
-        let account = account();
-        let js_ac: msal::AccountInfo = account.clone().into();
-        assert_eq!(js_ac.home_account_id(), account.home_account_id);
-        assert_eq!(js_ac.environment(), account.environment);
-        assert_eq!(js_ac.tenant_id(), account.tenant_id);
-        assert_eq!(js_ac.username(), account.username);
+        let js_ac: msal::AccountInfo = (&account()).into();
+        assert_eq!(js_ac.home_account_id(), account().home_account_id);
+        assert_eq!(js_ac.environment(), account().environment);
+        assert_eq!(js_ac.tenant_id(), account().tenant_id);
+        assert_eq!(js_ac.username(), account().username);
     }
 
     #[wasm_bindgen_test]

@@ -1,6 +1,6 @@
-use crate::{msal, set_option_string, AccountInfo};
-use msal::{JsArrayString, JsMirror};
-use std::{collections::HashMap, fmt::Display};
+use crate::{msal, AccountInfo};
+use msal::JsArrayString;
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 pub enum ResponseMode {
     Query,
@@ -19,72 +19,65 @@ impl Display for ResponseMode {
 }
 
 #[derive(Clone)]
-pub struct BaseAuthRequest {
-    scopes: Vec<String>,
-    authority: Option<String>,
-    correlation_id: Option<String>,
+pub struct BaseAuthRequest<'a> {
+    scopes: Vec<Cow<'a, str>>,
+    authority: Option<Cow<'a, str>>,
+    correlation_id: Option<Cow<'a, str>>,
 }
 
-impl BaseAuthRequest {
-    pub fn set_authority(mut self, authority: &str) -> Self {
-        match self.authority.as_mut() {
-            Some(a) => a.replace_range(.., authority),
-            None => self.authority = Some(String::from(authority)),
-        }
+impl<'a> BaseAuthRequest<'a> {
+    pub fn set_authority<T>(mut self, authority: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.authority = Some(authority.into());
         self
     }
 
-    pub fn set_correlation_id(mut self, correlation_id: &str) -> Self {
-        match self.correlation_id.as_mut() {
-            Some(a) => a.replace_range(.., correlation_id),
-            None => self.correlation_id = Some(String::from(correlation_id)),
-        }
+    pub fn set_correlation_id<T>(mut self, correlation_id: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.correlation_id = Some(correlation_id.into());
         self
-    }
-
-    fn clone_authority<F>(&self, cloner: F)
-    where
-        F: Fn(String),
-    {
-        self.authority.iter().for_each(|s| cloner(s.clone()));
-    }
-
-    fn clone_correlation_id<F>(&self, cloner: F)
-    where
-        F: Fn(String),
-    {
-        self.correlation_id.iter().for_each(|s| cloner(s.clone()));
     }
 }
 
-impl From<Vec<String>> for BaseAuthRequest {
-    fn from(scopes: Vec<String>) -> Self {
+// impl From<Vec<String>> for BaseAuthRequest {
+//     fn from(scopes: Vec<String>) -> Self {
+//         Self {
+//             scopes,
+//             authority: None,
+//             correlation_id: None,
+//         }
+//     }
+// }
+
+// impl From<Vec<&str>> for BaseAuthRequest {
+//     fn from(scopes: Vec<&str>) -> Self {
+//         scopes
+//             .into_iter()
+//             .map(String::from)
+//             .collect::<Vec<String>>()
+//             .into()
+//     }
+// }
+
+impl<'a, T> From<T> for BaseAuthRequest<'a>
+where
+    T: Into<Cow<'a, str>>,
+{
+    fn from(scope: T) -> Self {
         Self {
-            scopes,
+            scopes: vec![scope.into()],
             authority: None,
             correlation_id: None,
         }
     }
 }
-
-impl From<Vec<&str>> for BaseAuthRequest {
-    fn from(scopes: Vec<&str>) -> Self {
-        scopes
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<String>>()
-            .into()
-    }
-}
-
-impl From<&str> for BaseAuthRequest {
-    fn from(scope: &str) -> Self {
-        vec![scope.to_string()].into()
-    }
-}
 #[allow(dead_code)]
-pub struct AuthorizationUrlRequest {
-    base_request: BaseAuthRequest,
+pub struct AuthorizationUrlRequest<'a> {
+    base_request: Cow<'a, BaseAuthRequest<'a>>,
     redirect_uri: Option<String>,
     extra_scopes_to_consent: Option<Vec<String>>,
     response_mode: Option<ResponseMode>,
@@ -99,7 +92,7 @@ pub struct AuthorizationUrlRequest {
     nonce: Option<String>,
 }
 
-impl AuthorizationUrlRequest {
+impl<'a> AuthorizationUrlRequest<'a> {
     /// Can be retrieved from the account object username property or the upn claim in the ID token
     pub fn set_login_hint(mut self, login_hint: &str) -> Self {
         match self.login_hint.as_mut() {
@@ -110,31 +103,35 @@ impl AuthorizationUrlRequest {
     }
 }
 
-impl JsMirror for AuthorizationUrlRequest {
-    type JsTarget = msal::AuthorizationUrlRequest;
-}
-
-impl From<AuthorizationUrlRequest> for msal::AuthorizationUrlRequest {
+impl<'a> From<AuthorizationUrlRequest<'a>> for msal::AuthorizationUrlRequest {
     // TODO: Add in all fields
     fn from(request: AuthorizationUrlRequest) -> Self {
         let auth_req = msal::AuthorizationUrlRequest::new(
             &JsArrayString::from(request.base_request.scopes.clone()).into(),
         );
+
         request
             .base_request
-            .clone_authority(|s| auth_req.set_authority(s));
+            .authority
+            .iter()
+            .for_each(|s| auth_req.set_authority(s));
+
         request
             .base_request
-            .clone_correlation_id(|s| auth_req.set_correlation_id(s));
+            .correlation_id
+            .iter()
+            .for_each(|s| auth_req.set_correlation_id(s));
+
         request
             .login_hint
             .into_iter()
-            .for_each(|s| auth_req.set_login_hint(s));
+            .for_each(|s| auth_req.set_login_hint(s.as_str()));
+
         auth_req
     }
 }
 
-impl From<Vec<&str>> for AuthorizationUrlRequest {
+impl<'a> From<Vec<&'a str>> for AuthorizationUrlRequest<'a> {
     fn from(scopes: Vec<&str>) -> Self {
         scopes
             .into_iter()
@@ -144,7 +141,7 @@ impl From<Vec<&str>> for AuthorizationUrlRequest {
     }
 }
 
-impl From<Vec<String>> for AuthorizationUrlRequest {
+impl<'a> From<Vec<String>> for AuthorizationUrlRequest<'a> {
     fn from(scopes: Vec<String>) -> Self {
         Self {
             base_request: BaseAuthRequest::from(scopes),
@@ -164,10 +161,10 @@ impl From<Vec<String>> for AuthorizationUrlRequest {
     }
 }
 
-impl From<BaseAuthRequest> for AuthorizationUrlRequest {
-    fn from(base_request: BaseAuthRequest) -> Self {
+impl<'a> From<&'a BaseAuthRequest<'a>> for AuthorizationUrlRequest<'a> {
+    fn from(base_request: &'a BaseAuthRequest<'a>) -> Self {
         Self {
-            base_request,
+            base_request: Cow::Borrowed(base_request),
             redirect_uri: None,
             extra_scopes_to_consent: None,
             response_mode: None,
@@ -188,11 +185,6 @@ impl From<BaseAuthRequest> for AuthorizationUrlRequest {
 pub struct RedirectRequest {
     auth_url_req: AuthorizationUrlRequest,
     redirect_start_page: Option<String>,
-}
-
-#[cfg(feature = "redirect")]
-impl JsMirror for RedirectRequest {
-    type JsTarget = msal::RedirectRequest;
 }
 
 #[cfg(feature = "redirect")]
@@ -238,15 +230,18 @@ impl From<RedirectRequest> for msal::RedirectRequest {
 }
 
 #[derive(Clone)]
-pub struct SilentRequest {
-    base_request: BaseAuthRequest,
-    account: AccountInfo,
+pub struct SilentRequest<'a> {
+    base_request: &'a BaseAuthRequest<'a>,
+    account: &'a AccountInfo<'a>,
     force_refresh: Option<bool>,
-    redirect_uri: Option<String>,
+    redirect_uri: Option<Cow<'a, str>>,
 }
 
-impl SilentRequest {
-    pub fn from_account_info(base_request: BaseAuthRequest, account_info: AccountInfo) -> Self {
+impl<'a> SilentRequest<'a> {
+    pub fn from_account_info(
+        base_request: &'a BaseAuthRequest<'a>,
+        account_info: &'a AccountInfo<'a>,
+    ) -> Self {
         Self {
             base_request,
             account: account_info,
@@ -260,93 +255,94 @@ impl SilentRequest {
         self
     }
 
-    pub fn set_redirect_uri(mut self, redirect_uri: &str) -> Self {
-        match self.redirect_uri.as_mut() {
-            Some(s) => s.replace_range(.., redirect_uri),
-            None => self.redirect_uri = Some(redirect_uri.to_string()),
-        }
+    pub fn set_redirect_uri<T>(mut self, redirect_uri: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.redirect_uri = Some(redirect_uri.into());
         self
     }
 }
 
-impl JsMirror for SilentRequest {
-    type JsTarget = msal::SilentRequest;
-}
-
-impl From<SilentRequest> for msal::SilentRequest {
-    fn from(request: SilentRequest) -> Self {
+impl<'a> From<&'a SilentRequest<'a>> for msal::SilentRequest {
+    fn from(request: &'a SilentRequest) -> Self {
         let r = msal::SilentRequest::new(
             &JsArrayString::from(request.base_request.scopes.clone()).into(),
             request.account.into(),
         );
-        request.base_request.clone_authority(|v| r.set_authority(v));
+        request.base_request.authority.iter().for_each(|v| r.set_authority(v));
         request
             .base_request
-            .clone_correlation_id(|v| r.set_correlation_id(v));
+            .correlation_id.iter().for_each(|v| r.set_correlation_id(v));
         request
             .force_refresh
             .into_iter()
             .for_each(|v| r.set_force_refresh(v));
         request
             .redirect_uri
-            .into_iter()
+            .iter()
             .for_each(|v| r.set_redirect_uri(v));
         r
     }
 }
 
 #[derive(Default, Clone)]
-pub struct EndSessionRequest {
-    account: Option<AccountInfo>,
-    post_logout_redirect_uri: Option<String>,
-    authority: Option<String>,
-    correlation_id: Option<String>,
+pub struct EndSessionRequest<'a> {
+    account: Option<Cow<'a, AccountInfo<'a>>>,
+    post_logout_redirect_uri: Option<Cow<'a, str>>,
+    authority: Option<Cow<'a, str>>,
+    correlation_id: Option<Cow<'a, str>>,
 }
 
-impl EndSessionRequest {
-    pub fn set_account(mut self, account: AccountInfo) -> Self {
-        self.account = Some(account);
+impl<'a> EndSessionRequest<'a> {
+    pub fn set_account(mut self, account: &'a AccountInfo<'a>) -> Self {
+        self.account = Some(Cow::Borrowed(account));
         self
     }
 
-    pub fn set_post_logout_redirect_uri(mut self, post_logout_redirect_uri: &str) -> Self {
-        set_option_string(&mut self.post_logout_redirect_uri, post_logout_redirect_uri);
+    pub fn set_post_logout_redirect_uri<T>(mut self, post_logout_redirect_uri: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.post_logout_redirect_uri = Some(post_logout_redirect_uri.into());
         self
     }
 
-    pub fn set_authority(mut self, authority: &str) -> Self {
-        set_option_string(&mut self.authority, authority);
+    pub fn set_authority<T>(mut self, authority: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.authority = Some(authority.into());
         self
     }
 
-    pub fn set_correlation_id(mut self, correlation_id: &str) -> Self {
-        set_option_string(&mut self.correlation_id, correlation_id);
+    pub fn set_correlation_id<T>(mut self, correlation_id: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.correlation_id = Some(correlation_id.into());
         self
     }
 }
 
-impl JsMirror for EndSessionRequest {
-    type JsTarget = msal::EndSessionRequest;
-}
-
-impl From<EndSessionRequest> for msal::EndSessionRequest {
+impl<'a> From<EndSessionRequest<'a>> for msal::EndSessionRequest {
     fn from(request: EndSessionRequest) -> Self {
         let r = msal::EndSessionRequest::new();
-        request.account.into_iter().for_each(|v| {
-            r.set_account(v.into());
+        request.account.iter().for_each(|v| {
+            r.set_account(v.as_ref().into());
         });
         request
             .post_logout_redirect_uri
             .into_iter()
-            .for_each(|v| r.set_post_logout_redirect_uri(v));
+            .for_each(|v| r.set_post_logout_redirect_uri(&v));
         request
             .authority
             .into_iter()
-            .for_each(|v| r.set_authority(v));
+            .for_each(|v| r.set_authority(&v));
         request
             .correlation_id
             .into_iter()
-            .for_each(|v| r.set_correlation_id(v));
+            .for_each(|v| r.set_correlation_id(&v));
         r
     }
 }
@@ -372,7 +368,7 @@ mod test_request {
         // TODO: Write tests
     }
 
-    fn base_req() -> BaseAuthRequest {
+    fn base_req() -> BaseAuthRequest<'static> {
         BaseAuthRequest::from(SCOPE)
             .set_authority(AUTHORITY)
             .set_correlation_id(CORRELATION_ID)
@@ -380,18 +376,25 @@ mod test_request {
 
     #[wasm_bindgen_test]
     fn mirror_silent_request() {
-        let req = SilentRequest::from_account_info(base_req(), account())
+        // let bas_req =
+        let req = SilentRequest::from_account_info(&base_req(), &account())
             .set_force_refresh(FORCE_REFRESH)
             .set_redirect_uri(REDIRECT_URI);
 
-        let js_req: msal::SilentRequest = req.clone().into();
+        let js_req: msal::SilentRequest = (&req).into();
 
         assert_eq!(
             req.base_request.scopes,
             JsArrayString::from(js_req.scopes()).0
         );
-        assert_eq!(req.base_request.correlation_id, js_req.correlation_id());
-        assert_eq!(req.base_request.authority, js_req.authority());
+        assert_eq!(
+            req.base_request.correlation_id.map(Cow::into_owned),
+            js_req.correlation_id()
+        );
+        assert_eq!(
+            req.base_request.authority.map(Cow::into_owned),
+            js_req.authority()
+        );
         assert_eq!(
             req.account.home_account_id,
             js_req.account().home_account_id()
@@ -400,7 +403,7 @@ mod test_request {
         assert_eq!(req.account.tenant_id, js_req.account().tenant_id());
         assert_eq!(req.account.username, js_req.account().username());
         assert_eq!(req.force_refresh, js_req.force_refresh());
-        assert_eq!(req.redirect_uri, js_req.redirect_uri());
+        assert_eq!(req.redirect_uri.map(Cow::into_owned), js_req.redirect_uri());
 
         js_cast_checker::<msal::SilentRequest>(js_req.into());
     }
@@ -408,25 +411,37 @@ mod test_request {
     #[wasm_bindgen_test]
     fn mirror_end_session_request() {
         let req = EndSessionRequest::default()
-            .set_account(account())
+            .set_account(&account())
             .set_authority(AUTHORITY)
             .set_correlation_id(CORRELATION_ID)
             .set_post_logout_redirect_uri(POST_LOGOUT_URI);
 
         let js_req: msal::EndSessionRequest = req.clone().into();
-        assert_eq!(req.correlation_id, js_req.correlation_id());
         assert_eq!(
-            req.post_logout_redirect_uri,
+            req.correlation_id.map(Cow::into_owned),
+            js_req.correlation_id()
+        );
+        assert_eq!(
+            req.post_logout_redirect_uri.map(Cow::into_owned),
             js_req.post_logout_redirect_uri()
         );
-        assert_eq!(req.authority, js_req.authority());
+        assert_eq!(req.authority.map(Cow::into_owned), js_req.authority());
         assert_eq!(
             req.account.as_ref().unwrap().home_account_id,
             js_req.account().unwrap().home_account_id()
         );
-        assert_eq!(req.account.as_ref().unwrap().environment, js_req.account().unwrap().environment());
-        assert_eq!(req.account.as_ref().unwrap().tenant_id, js_req.account().unwrap().tenant_id());
-        assert_eq!(req.account.as_ref().unwrap().username, js_req.account().unwrap().username());
+        assert_eq!(
+            req.account.as_ref().unwrap().environment,
+            js_req.account().unwrap().environment()
+        );
+        assert_eq!(
+            req.account.as_ref().unwrap().tenant_id,
+            js_req.account().unwrap().tenant_id()
+        );
+        assert_eq!(
+            req.account.as_ref().unwrap().username,
+            js_req.account().unwrap().username()
+        );
 
         js_cast_checker::<msal::EndSessionRequest>(js_req.into());
     }

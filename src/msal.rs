@@ -22,9 +22,12 @@ use js_sys::{Array, Date, JsString, Object};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
-pub trait JsMirror: std::marker::Sized {
-    // TODO: Toggle this on?
-    type JsTarget: From<Self>; // + Into<Self>;
+pub trait Msal {
+    fn auth(&self) -> &PublicClientApplication;
+
+    fn empty_request() -> AuthorizationUrlRequest {
+        AuthorizationUrlRequest::new(&Array::new())
+    }
 }
 
 #[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
@@ -57,17 +60,17 @@ extern "C" {
     pub fn new() -> CacheOptions;
 
     #[wasm_bindgen(method, setter = cacheLocation)]
-    pub fn set_cache_location(this: &CacheOptions, cache_location: String);
+    pub fn set_cache_location(this: &CacheOptions, cache_location: &str);
 
     #[cfg(test)]
-    #[wasm_bindgen(method, setter = cacheLocation)]
+    #[wasm_bindgen(method, getter = cacheLocation)]
     pub fn cache_location(this: &CacheOptions) -> Option<String>;
 
     #[wasm_bindgen(method, setter = storeAuthStateInCookie)]
     pub fn set_store_auth_state_in_cookie(this: &CacheOptions, store_auth_state_in_cookie: bool);
-    
+
     #[cfg(test)]
-    #[wasm_bindgen(method, setter = storeAuthStateInCookie)]
+    #[wasm_bindgen(method, getter = storeAuthStateInCookie)]
     pub fn store_auth_state_in_cookie(this: &CacheOptions) -> Option<bool>;
 
     // file://./../node_modules/@azure/msal-browser/dist/src/config/Configuration.d.ts
@@ -91,21 +94,21 @@ extern "C" {
     pub fn authority(this: &AuthorizationUrlRequest) -> String;
 
     #[wasm_bindgen(method, setter)]
-    pub fn set_authority(this: &AuthorizationUrlRequest, authority: String);
+    pub fn set_authority(this: &AuthorizationUrlRequest, authority: &str);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = correlationId)]
     pub fn correlation_id(this: &AuthorizationUrlRequest) -> String;
 
     #[wasm_bindgen(method, setter, js_name = correlationId)]
-    pub fn set_correlation_id(this: &AuthorizationUrlRequest, correlation_id: String);
+    pub fn set_correlation_id(this: &AuthorizationUrlRequest, correlation_id: &str);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = loginHint)]
     pub fn login_hint(this: &AuthorizationUrlRequest) -> String;
 
     #[wasm_bindgen(method, setter, js_name = loginHint)]
-    pub fn set_login_hint(this: &AuthorizationUrlRequest, login_hint: String);
+    pub fn set_login_hint(this: &AuthorizationUrlRequest, login_hint: &str);
 
     // file://./..//node_modules/@azure/msal-common/dist/src/account/AccountInfo.d.ts
     pub type AccountInfo;
@@ -148,21 +151,21 @@ extern "C" {
     pub fn post_logout_redirect_uri(this: &EndSessionRequest) -> Option<String>;
 
     #[wasm_bindgen(method, setter, js_name = postLogoutRedirectUri)]
-    pub fn set_post_logout_redirect_uri(this: &EndSessionRequest, post_logout_redirect_uri: String);
+    pub fn set_post_logout_redirect_uri(this: &EndSessionRequest, post_logout_redirect_uri: &str);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter)]
     pub fn authority(this: &EndSessionRequest) -> Option<String>;
 
     #[wasm_bindgen(method, setter)]
-    pub fn set_authority(this: &EndSessionRequest, authority: String);
+    pub fn set_authority(this: &EndSessionRequest, authority: &str);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = correlationId)]
     pub fn correlation_id(this: &EndSessionRequest) -> Option<String>;
 
     #[wasm_bindgen(method, setter, js_name = correlationId)]
-    pub fn set_correlation_id(this: &EndSessionRequest, correlation_id: String);
+    pub fn set_correlation_id(this: &EndSessionRequest, correlation_id: &str);
 
     // file://./..//node_modules/@azure/msal-browser/dist/src/request/RedirectRequest.d.ts
     pub type RedirectRequest;
@@ -185,14 +188,14 @@ extern "C" {
     pub fn account(request: &SilentRequest) -> AccountInfo;
 
     #[wasm_bindgen(method, setter)]
-    pub fn set_authority(request: &SilentRequest, authority: String);
+    pub fn set_authority(request: &SilentRequest, authority: &str);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter)]
     pub fn authority(request: &SilentRequest) -> Option<String>;
 
     #[wasm_bindgen(method, setter, js_name = correlationId)]
-    pub fn set_correlation_id(request: &SilentRequest, correlation_id: String);
+    pub fn set_correlation_id(request: &SilentRequest, correlation_id: &str);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = correlationId)]
@@ -206,7 +209,7 @@ extern "C" {
     pub fn force_refresh(request: &SilentRequest) -> Option<bool>;
 
     #[wasm_bindgen(method, setter, js_name = redirectUri)]
-    pub fn set_redirect_uri(request: &SilentRequest, redirect_uri: String);
+    pub fn set_redirect_uri(request: &SilentRequest, redirect_uri: &str);
 
     #[cfg(test)]
     #[wasm_bindgen(method, getter, js_name = redirectUri)]
@@ -409,23 +412,29 @@ mod tests {
     fn parse_claims() {
         let id_claims: TokenClaims = idToken.clone().into();
         let access_claims: TokenClaims = accessToken.clone().into();
-        let claim = id_claims.0.iter().find_map(|v| {
-            if let TokenClaim::alg(c) = v {
-                Some(c)
-            } else {
-                None
-            }
-        }).unwrap();
+        let claim = id_claims
+            .0
+            .iter()
+            .find_map(|v| {
+                if let TokenClaim::alg(c) = v {
+                    Some(c)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
         assert_eq!(claim, "RS256");
 
-        let no_custom = |claims: TokenClaims| claims.0.into_iter().find_map(|v| {
-            if let TokenClaim::custom(c, v) = v {
-                Some((c, v))
-            } else {
-                None
-            }
-        });
-        
+        let no_custom = |claims: TokenClaims| {
+            claims.0.into_iter().find_map(|v| {
+                if let TokenClaim::custom(c, v) = v {
+                    Some((c, v))
+                } else {
+                    None
+                }
+            })
+        };
+
         let all: TokenClaims = completeToken.clone().into();
 
         // Check have found all azure claims, the source may not have them all though!

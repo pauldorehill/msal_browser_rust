@@ -1,5 +1,5 @@
 use crate::{
-    acquire_token_silent, msal,
+    acquire_token_silent, msal, msal::Msal,
     requests::{AuthorizationUrlRequest, RedirectRequest, SilentRequest},
     sso_silent, AuthenticationResult, Configuration, PublicClientApplication,
 };
@@ -17,15 +17,19 @@ where
     // on_redirect_error: Option<FErr>,
 }
 
-impl<FSuccess> PublicClientApplication for RedirectApp<FSuccess>
-where
-    FSuccess: Fn(AuthenticationResult),
-    // FErr: Fn(JsValue),
+impl<FSuccess> Msal for RedirectApp<FSuccess> 
+where FSuccess: Fn(AuthenticationResult),
 {
     fn auth(&self) -> &msal::PublicClientApplication {
         &self.auth
     }
 }
+
+impl<FSuccess> PublicClientApplication for RedirectApp<FSuccess>
+where
+    FSuccess: Fn(AuthenticationResult),
+    // FErr: Fn(JsValue),
+{}
 
 impl<FSuccess> RedirectApp<FSuccess>
 where
@@ -77,7 +81,7 @@ where
     pub async fn sso_silent(
         &self,
         request: AuthorizationUrlRequest,
-    ) -> Result<AuthenticationResult, JsValue> {
+    ) -> Result<AuthenticationResult<'a>, JsValue> {
         sso_silent(&self.auth, request).await
     }
 

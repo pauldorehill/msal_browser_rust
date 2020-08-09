@@ -1,9 +1,3 @@
-// https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md
-
-// The configuration object has the following structure, and can be passed into the PublicClientApplication constructor. 
-// The only required config parameter is the client ID of the application. 
-// Everything else is optional, but may be required depending on your tenant and application model.
-
 const LogLevel = {
     Error: undefined,
     Info: undefined,
@@ -11,6 +5,10 @@ const LogLevel = {
     Warning: undefined,
 }
 
+// https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md
+// The configuration object has the following structure, and can be passed into the PublicClientApplication constructor. 
+// The only required config parameter is the client ID of the application. 
+// Everything else is optional, but may be required depending on your tenant and application model.
 const msalConfig = {
     auth: {
         clientId: "enter_client_id_here",
@@ -114,7 +112,11 @@ const idToken = {
 const authResponse = {
     uniqueId: "uniqueId",
     tenantId: "tenantId",
-    scopes: ["scopes"],
+    scopes: [
+        "openid",
+        "profile",
+        "email"
+    ],
     account: {
         homeAccountId: "homeAccountId",
         environment: "environment",
