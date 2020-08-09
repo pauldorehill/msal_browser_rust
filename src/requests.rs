@@ -1,6 +1,9 @@
 use crate::{msal, AccountInfo};
 use msal::JsArrayString;
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::HashMap,
+};
 
 pub enum ResponseMode {
     Query,
@@ -8,19 +11,19 @@ pub enum ResponseMode {
     FormPost,
 }
 
-impl Display for ResponseMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Borrow<str> for ResponseMode {
+    fn borrow(&self) -> &str {
         match &self {
-            ResponseMode::Query => write!(f, "query"),
-            ResponseMode::Fragment => write!(f, "fragment"),
-            ResponseMode::FormPost => write!(f, "form_post"),
+            ResponseMode::Query => "query",
+            ResponseMode::Fragment => "fragment",
+            ResponseMode::FormPost => "form_post",
         }
     }
 }
 
 #[derive(Clone)]
 pub struct BaseAuthRequest<'a> {
-    scopes: Vec<Cow<'a, str>>,
+    scopes: Vec<Cow<'a, str>>, // Leave as Vec in case want to update as using?
     authority: Option<Cow<'a, str>>,
     correlation_id: Option<Cow<'a, str>>,
 }
@@ -43,108 +46,83 @@ impl<'a> BaseAuthRequest<'a> {
     }
 }
 
-// impl From<Vec<String>> for BaseAuthRequest {
-//     fn from(scopes: Vec<String>) -> Self {
-//         Self {
-//             scopes,
-//             authority: None,
-//             correlation_id: None,
-//         }
-//     }
-// }
-
-// impl From<Vec<&str>> for BaseAuthRequest {
-//     fn from(scopes: Vec<&str>) -> Self {
-//         scopes
-//             .into_iter()
-//             .map(String::from)
-//             .collect::<Vec<String>>()
-//             .into()
-//     }
-// }
-
-impl<'a, T> From<T> for BaseAuthRequest<'a>
+impl<'a, T> From<&'a [T]> for BaseAuthRequest<'a>
 where
-    T: Into<Cow<'a, str>>,
+    T: Into<Cow<'a, str>> + std::clone::Clone,
 {
-    fn from(scope: T) -> Self {
+    fn from(scopes: &'a [T]) -> Self {
+        let scopes: Vec<Cow<'a, str>> = scopes.iter().cloned().map(|s| s.into()).collect();
         Self {
-            scopes: vec![scope.into()],
+            scopes,
             authority: None,
             correlation_id: None,
         }
     }
 }
-#[allow(dead_code)]
+
+#[allow(dead_code)] //TODO: Remove this
 pub struct AuthorizationUrlRequest<'a> {
-    base_request: Cow<'a, BaseAuthRequest<'a>>,
-    redirect_uri: Option<String>,
-    extra_scopes_to_consent: Option<Vec<String>>,
+    base_request: Cow<'a, BaseAuthRequest<'a>>, // Cow here to allow both types of From<..>
+    redirect_uri: Option<Cow<'a, str>>,
+    extra_scopes_to_consent: Option<Vec<Cow<'a, str>>>,
     response_mode: Option<ResponseMode>,
-    code_challenge: Option<String>,
-    code_challenge_method: Option<String>,
-    state: Option<String>,
-    prompt: Option<String>,
-    login_hint: Option<String>,
-    domain_hint: Option<String>,
-    extra_query_parameters: Option<HashMap<String, String>>,
-    claims: Option<String>,
-    nonce: Option<String>,
+    code_challenge: Option<Cow<'a, str>>,
+    code_challenge_method: Option<Cow<'a, str>>,
+    state: Option<Cow<'a, str>>,
+    prompt: Option<Cow<'a, str>>,
+    login_hint: Option<Cow<'a, str>>,
+    domain_hint: Option<Cow<'a, str>>,
+    extra_query_parameters: Option<HashMap<Cow<'a, str>, Cow<'a, str>>>, //TODO: Is this ok?
+    claims: Option<Cow<'a, str>>,
+    nonce: Option<Cow<'a, str>>,
 }
 
 impl<'a> AuthorizationUrlRequest<'a> {
-    /// Can be retrieved from the account object username property or the upn claim in the ID token
-    pub fn set_login_hint(mut self, login_hint: &str) -> Self {
-        match self.login_hint.as_mut() {
-            Some(s) => s.replace_range(.., login_hint),
-            None => self.login_hint = Some(String::from(login_hint)),
-        }
+    pub fn set_login_hint<T>(mut self, login_hint: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.login_hint = Some(login_hint.into());
         self
     }
 }
 
-impl<'a> From<AuthorizationUrlRequest<'a>> for msal::AuthorizationUrlRequest {
+impl<'a> From<&'a AuthorizationUrlRequest<'a>> for msal::AuthorizationUrlRequest {
     // TODO: Add in all fields
-    fn from(request: AuthorizationUrlRequest) -> Self {
+    fn from(request: &'a AuthorizationUrlRequest) -> Self {
         let auth_req = msal::AuthorizationUrlRequest::new(
-            &JsArrayString::from(request.base_request.scopes.clone()).into(),
+            &JsArrayString::from(&request.base_request.scopes).into(),
         );
 
         request
             .base_request
             .authority
             .iter()
-            .for_each(|s| auth_req.set_authority(s));
+            .for_each(|s| auth_req.set_authority(&s));
 
         request
             .base_request
             .correlation_id
             .iter()
-            .for_each(|s| auth_req.set_correlation_id(s));
+            .for_each(|s| auth_req.set_correlation_id(&s));
 
         request
             .login_hint
+            .as_deref()
             .into_iter()
-            .for_each(|s| auth_req.set_login_hint(s.as_str()));
+            .for_each(|s| auth_req.set_login_hint(s));
 
         auth_req
     }
 }
 
-impl<'a> From<Vec<&'a str>> for AuthorizationUrlRequest<'a> {
-    fn from(scopes: Vec<&str>) -> Self {
-        scopes
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<String>>()
-            .into()
-    }
-}
-
-impl<'a> From<Vec<String>> for AuthorizationUrlRequest<'a> {
-    fn from(scopes: Vec<String>) -> Self {
+impl<'a, T> From<&'a [T]> for AuthorizationUrlRequest<'a>
+where
+    T: Into<Cow<'a, str>> + std::clone::Clone,
+{
+    fn from(scopes: &'a [T]) -> Self {
         Self {
-            base_request: BaseAuthRequest::from(scopes),
+            base_request: Cow::Owned(scopes.into()),
             redirect_uri: None,
             extra_scopes_to_consent: None,
             response_mode: None,
@@ -182,35 +160,17 @@ impl<'a> From<&'a BaseAuthRequest<'a>> for AuthorizationUrlRequest<'a> {
 }
 #[allow(dead_code)]
 #[cfg(feature = "redirect")]
-pub struct RedirectRequest {
-    auth_url_req: AuthorizationUrlRequest,
-    redirect_start_page: Option<String>,
+pub struct RedirectRequest<'a> {
+    auth_url_req: AuthorizationUrlRequest<'a>,
+    redirect_start_page: Option<Cow<'a, str>>,
 }
 
 #[cfg(feature = "redirect")]
-impl RedirectRequest {
-    pub fn new(scopes: Vec<String>) -> Self {
-        Self {
-            auth_url_req: AuthorizationUrlRequest::from(scopes),
-            redirect_start_page: None,
-        }
-    }
-}
-
-#[cfg(feature = "redirect")]
-impl From<Vec<&str>> for RedirectRequest {
-    fn from(scopes: Vec<&str>) -> Self {
-        scopes
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<String>>()
-            .into()
-    }
-}
-
-#[cfg(feature = "redirect")]
-impl From<Vec<String>> for RedirectRequest {
-    fn from(scopes: Vec<String>) -> Self {
+impl<'a, T> From<&'a [T]> for RedirectRequest<'a>
+where
+    T: Into<Cow<'a, str>> + std::clone::Clone,
+{
+    fn from(scopes: &'a [T]) -> Self {
         Self {
             auth_url_req: scopes.into(),
             redirect_start_page: None,
@@ -219,11 +179,11 @@ impl From<Vec<String>> for RedirectRequest {
 }
 
 #[cfg(feature = "redirect")]
-impl From<RedirectRequest> for msal::RedirectRequest {
+impl<'a> From<&'a RedirectRequest<'a>> for msal::RedirectRequest {
     // TODO: Add in all fields
-    fn from(request: RedirectRequest) -> Self {
+    fn from(request: &'a RedirectRequest<'a>) -> Self {
         let auth_req = msal::RedirectRequest::new(
-            &JsArrayString::from(request.auth_url_req.base_request.scopes.clone()).into(),
+            &JsArrayString::from(&request.auth_url_req.base_request.scopes).into(),
         );
         auth_req
     }
@@ -232,7 +192,7 @@ impl From<RedirectRequest> for msal::RedirectRequest {
 #[derive(Clone)]
 pub struct SilentRequest<'a> {
     base_request: &'a BaseAuthRequest<'a>,
-    account: &'a AccountInfo<'a>,
+    account: &'a AccountInfo,
     force_refresh: Option<bool>,
     redirect_uri: Option<Cow<'a, str>>,
 }
@@ -240,7 +200,7 @@ pub struct SilentRequest<'a> {
 impl<'a> SilentRequest<'a> {
     pub fn from_account_info(
         base_request: &'a BaseAuthRequest<'a>,
-        account_info: &'a AccountInfo<'a>,
+        account_info: &'a AccountInfo,
     ) -> Self {
         Self {
             base_request,
@@ -267,13 +227,19 @@ impl<'a> SilentRequest<'a> {
 impl<'a> From<&'a SilentRequest<'a>> for msal::SilentRequest {
     fn from(request: &'a SilentRequest) -> Self {
         let r = msal::SilentRequest::new(
-            &JsArrayString::from(request.base_request.scopes.clone()).into(),
+            &JsArrayString::from(&request.base_request.scopes).into(),
             request.account.into(),
         );
-        request.base_request.authority.iter().for_each(|v| r.set_authority(v));
         request
             .base_request
-            .correlation_id.iter().for_each(|v| r.set_correlation_id(v));
+            .authority
+            .iter()
+            .for_each(|v| r.set_authority(v));
+        request
+            .base_request
+            .correlation_id
+            .iter()
+            .for_each(|v| r.set_correlation_id(v));
         request
             .force_refresh
             .into_iter()
@@ -288,15 +254,15 @@ impl<'a> From<&'a SilentRequest<'a>> for msal::SilentRequest {
 
 #[derive(Default, Clone)]
 pub struct EndSessionRequest<'a> {
-    account: Option<Cow<'a, AccountInfo<'a>>>,
+    account: Option<&'a AccountInfo>,
     post_logout_redirect_uri: Option<Cow<'a, str>>,
     authority: Option<Cow<'a, str>>,
     correlation_id: Option<Cow<'a, str>>,
 }
 
 impl<'a> EndSessionRequest<'a> {
-    pub fn set_account(mut self, account: &'a AccountInfo<'a>) -> Self {
-        self.account = Some(Cow::Borrowed(account));
+    pub fn set_account(mut self, account: &'a AccountInfo) -> Self {
+        self.account = Some(account);
         self
     }
 
@@ -328,8 +294,8 @@ impl<'a> EndSessionRequest<'a> {
 impl<'a> From<EndSessionRequest<'a>> for msal::EndSessionRequest {
     fn from(request: EndSessionRequest) -> Self {
         let r = msal::EndSessionRequest::new();
-        request.account.iter().for_each(|v| {
-            r.set_account(v.as_ref().into());
+        request.account.iter().for_each(|&v| {
+            r.set_account(v.into());
         });
         request
             .post_logout_redirect_uri
@@ -369,15 +335,16 @@ mod test_request {
     }
 
     fn base_req() -> BaseAuthRequest<'static> {
-        BaseAuthRequest::from(SCOPE)
+        BaseAuthRequest::from(&[SCOPE][..])
             .set_authority(AUTHORITY)
             .set_correlation_id(CORRELATION_ID)
     }
 
     #[wasm_bindgen_test]
     fn mirror_silent_request() {
-        // let bas_req =
-        let req = SilentRequest::from_account_info(&base_req(), &account())
+        let base_req = base_req();
+        let account = account();
+        let req = SilentRequest::from_account_info(&base_req, &account)
             .set_force_refresh(FORCE_REFRESH)
             .set_redirect_uri(REDIRECT_URI);
 
@@ -388,11 +355,11 @@ mod test_request {
             JsArrayString::from(js_req.scopes()).0
         );
         assert_eq!(
-            req.base_request.correlation_id.map(Cow::into_owned),
+            req.base_request.correlation_id.as_deref().map(String::from),
             js_req.correlation_id()
         );
         assert_eq!(
-            req.base_request.authority.map(Cow::into_owned),
+            req.base_request.authority.as_deref().map(String::from),
             js_req.authority()
         );
         assert_eq!(
@@ -410,8 +377,9 @@ mod test_request {
 
     #[wasm_bindgen_test]
     fn mirror_end_session_request() {
+        let account = account();
         let req = EndSessionRequest::default()
-            .set_account(&account())
+            .set_account(&account)
             .set_authority(AUTHORITY)
             .set_correlation_id(CORRELATION_ID)
             .set_post_logout_redirect_uri(POST_LOGOUT_URI);

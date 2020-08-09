@@ -10,7 +10,7 @@ pub mod requests;
 use js_sys::{Array, Date, Object};
 use msal::JsArrayString;
 use requests::*;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::convert::TryFrom;
 use wasm_bindgen::{JsCast, JsValue};
 
@@ -94,14 +94,15 @@ pub enum CacheLocation {
     Local,
 }
 
-impl CacheLocation {
-    fn as_str(&self) -> &str {
+impl Borrow<str> for CacheLocation {
+    fn borrow(&self) -> &str {
         match &self {
             CacheLocation::Session => "sessionStorage",
             CacheLocation::Local => "localStorage",
         }
     }
 }
+
 //TODO: Change to builder?
 #[derive(Default)]
 pub struct CacheOptions {
@@ -127,7 +128,7 @@ impl From<CacheOptions> for msal::CacheOptions {
         cache_options
             .cache_location
             .iter()
-            .for_each(|v| cache.set_cache_location(v.as_str()));
+            .for_each(|v| cache.set_cache_location(v.borrow()));
         cache_options
             .store_auth_state_in_cookie
             .iter()
@@ -137,6 +138,7 @@ impl From<CacheOptions> for msal::CacheOptions {
 }
 
 // TODO: Add in all fields
+#[allow(dead_code)]
 pub struct Configuration<'a> {
     auth: BrowserAuthOptions<'a>,
     cache: Option<CacheOptions>,
@@ -295,7 +297,8 @@ impl From<JsValue> for TokenClaim {
         let kv = js_value.unchecked_into::<Array>();
         let value = kv.get(1);
         let key: String = kv.get(0).as_string().unwrap();
-        // Would like to close over key and value, but can't since the closure takes ownership
+        //TODO: Would like to close over key and value, but can't since the closure takes ownership
+        //TODO: Rather than returning a custom claim, should these return nothing since the type is known?
         let make_string = |f: &dyn Fn(String) -> Self, key, value: JsValue| match value.as_string()
         {
             None => Self::custom(key, value),
@@ -402,7 +405,6 @@ impl From<JsValue> for TokenClaim {
     }
 }
 
-// TODO: Vec or Set on claim? the stand says the are unique
 pub struct TokenClaims(pub Vec<TokenClaim>);
 
 impl From<Object> for TokenClaims {
@@ -415,22 +417,37 @@ impl From<Object> for TokenClaims {
 
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
-pub struct AuthenticationResult<'a> {
-    pub unique_id: String,
-    pub tenant_id: String,
-    pub scopes: Vec<String>,
-    pub account: AccountInfo<'a>,
-    pub id_token: String,
-    pub id_token_claims: TokenClaims,
-    pub access_token: String,
-    pub from_cache: bool,
-    pub expires_on: Date,
-    pub ext_expires_on: Option<Date>,
-    pub state: Option<String>,
-    pub family_id: Option<String>,
+#[allow(dead_code)] //TODO add getters
+pub struct AuthenticationResult {
+    unique_id: String,
+    tenant_id: String,
+    scopes: Vec<String>,
+    account: AccountInfo,
+    id_token: String,
+    id_token_claims: TokenClaims,
+    access_token: String,
+    from_cache: bool,
+    expires_on: Date,
+    ext_expires_on: Option<Date>,
+    state: Option<String>,
+    family_id: Option<String>,
 }
 
-impl<'a> From<msal::AuthenticationResult> for AuthenticationResult<'a> {
+impl AuthenticationResult {
+    pub fn unique_id(&self) -> &str {
+        &self.unique_id
+    }
+
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    pub fn expires_on(&self) -> &Date {
+        &self.expires_on
+    }
+    //TODO: Add all getters
+}
+impl From<msal::AuthenticationResult> for AuthenticationResult {
     fn from(auth_result: msal::AuthenticationResult) -> Self {
         Self {
             unique_id: auth_result.unique_id(),
@@ -449,7 +466,7 @@ impl<'a> From<msal::AuthenticationResult> for AuthenticationResult<'a> {
     }
 }
 
-impl<'a> From<JsValue> for AuthenticationResult<'a> {
+impl From<JsValue> for AuthenticationResult {
     fn from(value: JsValue) -> Self {
         value.unchecked_into::<msal::AuthenticationResult>().into()
     }
@@ -491,8 +508,8 @@ pub trait PublicClientApplication: msal::Msal {
 // needs a login_hint, sid or account object on the request
 async fn sso_silent<'a>(
     client_app: &msal::PublicClientApplication,
-    request: AuthorizationUrlRequest<'a>,
-) -> Result<AuthenticationResult<'a>, JsValue> {
+    request: &'a AuthorizationUrlRequest<'a>,
+) -> Result<AuthenticationResult, JsValue> {
     client_app.sso_silent(request.into()).await.map(Into::into)
 }
 
@@ -501,8 +518,8 @@ async fn sso_silent<'a>(
 // Call this first, then if it fails will will need to call the interactive methods
 async fn acquire_token_silent<'a>(
     client_app: &msal::PublicClientApplication,
-    request: &SilentRequest<'a>,
-) -> Result<AuthenticationResult<'a>, JsValue> {
+    request: &'a SilentRequest<'a>,
+) -> Result<AuthenticationResult, JsValue> {
     client_app
         .acquire_token_silent(request.into())
         .await
@@ -510,37 +527,54 @@ async fn acquire_token_silent<'a>(
 }
 
 #[derive(Clone)]
-pub struct AccountInfo<'a> {
-    home_account_id: Cow<'a, str>,
-    environment: Cow<'a, str>,
-    tenant_id: Cow<'a, str>,
-    username: Cow<'a, str>,
+pub struct AccountInfo {
+    home_account_id: String,
+    environment: String,
+    tenant_id: String,
+    username: String,
 }
 
-impl From<msal::AccountInfo> for AccountInfo<'_> {
+impl AccountInfo {
+    pub fn home_account_id(&self) -> &str {
+        &self.home_account_id
+    }
+
+    pub fn environment(&self) -> &str {
+        &self.environment
+    }
+
+    pub fn tenant_id(&self) -> &str {
+        &self.tenant_id
+    }
+
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+}
+
+impl From<msal::AccountInfo> for AccountInfo {
     fn from(account_info: msal::AccountInfo) -> Self {
         Self {
-            home_account_id: Cow::from(account_info.home_account_id()),
-            environment: Cow::from(account_info.environment()),
-            tenant_id: Cow::from(account_info.tenant_id()),
-            username: Cow::from(account_info.username()),
+            home_account_id: account_info.home_account_id(),
+            environment: account_info.environment(),
+            tenant_id: account_info.tenant_id(),
+            username: account_info.username(),
         }
     }
 }
 
-impl<'a> From<&'a AccountInfo<'a>> for msal::AccountInfo {
-    fn from(account_info: &'a AccountInfo<'a>) -> Self {
-        let account_info = account_info.clone();
+impl<'a> From<&'a AccountInfo> for msal::AccountInfo {
+    fn from(account_info: &'a AccountInfo) -> Self {
         msal::AccountInfo::new(
-            account_info.home_account_id.into_owned(),
-            account_info.environment.into_owned(),
-            account_info.tenant_id.into_owned(),
-            account_info.username.into_owned(),
+            account_info.home_account_id.to_owned(),
+            account_info.environment.to_owned(),
+            account_info.tenant_id.to_owned(),
+            account_info.username.to_owned(),
         )
     }
 }
 
-impl AccountInfo<'_> {
+impl AccountInfo {
     pub fn from_array(array: Array) -> Vec<Self> {
         array
             .iter()
@@ -596,12 +630,12 @@ mod tests {
         format!("username_{}", i)
     }
 
-    pub fn account() -> AccountInfo<'static> {
+    pub fn account() -> AccountInfo {
         AccountInfo {
-            home_account_id: Cow::from(HOME_ACCOUNT_ID),
-            environment: Cow::from(ENVIRONMENT),
-            tenant_id: Cow::from(TENANT_ID),
-            username: Cow::from(USERNAME),
+            home_account_id: HOME_ACCOUNT_ID.to_string(),
+            environment: ENVIRONMENT.to_string(),
+            tenant_id: TENANT_ID.to_string(),
+            username: USERNAME.to_string(),
         }
     }
 

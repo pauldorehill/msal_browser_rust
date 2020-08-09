@@ -21,6 +21,7 @@
 use js_sys::{Array, Date, JsString, Object};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use std::borrow::Cow;
 
 pub trait Msal {
     fn auth(&self) -> &PublicClientApplication;
@@ -337,9 +338,7 @@ impl From<Vec<String>> for AuthorizationUrlRequest {
     }
 }
 
-// TODO: Should i be using unchecked? I know the types, would likely
-// just unwrap anyway... but could pass out more useful error?
-fn array_to_vec<JsT, T>(array: Array) -> Vec<T>
+fn array_unchecked_to_vec<JsT, T>(array: Array) -> Vec<T>
 where
     JsT: JsCast + Into<T>,
 {
@@ -365,15 +364,21 @@ impl From<&str> for JsArrayString {
     }
 }
 
+impl<'a> From<&'a Vec<Cow<'a, str>>> for JsArrayString {
+    fn from(scopes: &'a Vec<Cow<'a, str>>) -> Self {
+        Self(scopes.clone().into_iter().map(Cow::into_owned).collect())
+    }
+}
+
 impl From<Vec<String>> for JsArrayString {
-    fn from(xs: Vec<String>) -> Self {
-        JsArrayString(xs)
+    fn from(scopes: Vec<String>) -> Self {
+        JsArrayString(scopes)
     }
 }
 
 impl From<Array> for JsArrayString {
     fn from(array: Array) -> Self {
-        Self(array_to_vec::<JsString, String>(array))
+        Self(array_unchecked_to_vec::<JsString, String>(array))
     }
 }
 

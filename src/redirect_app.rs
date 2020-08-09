@@ -57,7 +57,7 @@ where
         match self.auth.handle_redirect_promise().await {
             Ok(auth_result) => {
                 // AuthenticationResult will be undefined / null if not a redirect
-                // Can't use the 'safe' methods since the type check fails even when valid - not an object?
+                // Can't use the 'safe' methods since the type check fails even when valid as is an Object.
                 let auth_res = auth_result.unchecked_into::<msal::AuthenticationResult>();
                 if auth_res.is_undefined() || auth_res.is_null() {
                     self.auth.login_redirect(scopes.into())
@@ -74,20 +74,20 @@ where
         }
     }
 
-    pub async fn acquire_token_redirect(&self, request: RedirectRequest) {
+    pub async fn acquire_token_redirect<'a>(&self, request: &'a RedirectRequest<'a>) {
         self.auth.acquire_token_redirect(request.into())
     }
 
-    pub async fn sso_silent(
+    pub async fn sso_silent<'a>(
         &self,
-        request: AuthorizationUrlRequest,
-    ) -> Result<AuthenticationResult<'a>, JsValue> {
+        request: &'a AuthorizationUrlRequest<'a>,
+    ) -> Result<AuthenticationResult, JsValue> {
         sso_silent(&self.auth, request).await
     }
 
-    pub async fn acquire_token_silent(
+    pub async fn acquire_token_silent<'a>(
         &self,
-        request: SilentRequest,
+        request: &'a SilentRequest<'a>,
     ) -> Result<AuthenticationResult, JsValue> {
         acquire_token_silent(&self.auth, request).await
     }

@@ -1,5 +1,6 @@
 use crate::{
-    acquire_token_silent, msal, msal::Msal,
+    acquire_token_silent, msal,
+    msal::Msal,
     requests::{AuthorizationUrlRequest, SilentRequest},
     sso_silent, AuthenticationResult, BrowserAuthOptions, Configuration, PublicClientApplication,
 };
@@ -24,7 +25,7 @@ impl PopupApp {
         }
     }
 
-    pub async fn login_popup(&self) -> Result<AuthenticationResult<'_>, JsValue> {
+    pub async fn login_popup(&self) -> Result<AuthenticationResult, JsValue> {
         self.auth
             .login_popup(Self::empty_request())
             .await
@@ -34,28 +35,28 @@ impl PopupApp {
     pub async fn login_popup_with_scopes(
         &self,
         scopes: Vec<String>,
-    ) -> Result<AuthenticationResult<'_>, JsValue> {
+    ) -> Result<AuthenticationResult, JsValue> {
         self.auth.login_popup(scopes.into()).await.map(Into::into)
     }
 
     pub async fn sso_silent<'a>(
         &self,
-        request: AuthorizationUrlRequest<'a>,
-    ) -> Result<AuthenticationResult<'a>, JsValue> {
+        request: &'a AuthorizationUrlRequest<'a>,
+    ) -> Result<AuthenticationResult, JsValue> {
         sso_silent(&self.auth, request).await
     }
 
     pub async fn acquire_token_silent<'a>(
         &self,
-        request: &SilentRequest<'a>,
-    ) -> Result<AuthenticationResult<'a>, JsValue> {
+        request: &'a SilentRequest<'a>,
+    ) -> Result<AuthenticationResult, JsValue> {
         acquire_token_silent(&self.auth, request).await
     }
 
     pub async fn acquire_token_popup<'a>(
         &self,
-        request: AuthorizationUrlRequest<'a>,
-    ) -> Result<AuthenticationResult<'a>, JsValue> {
+        request: &'a AuthorizationUrlRequest<'a>,
+    ) -> Result<AuthenticationResult, JsValue> {
         self.auth
             .acquire_token_popup(request.into())
             .await
