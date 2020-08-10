@@ -1,15 +1,6 @@
 # Rust + WASM + msal-browser
 Rust wrapper for [msal-browser.js](https://github.com/AzureAD/microsoft-authentication-library-for-js). Still under dev, but you can login, get tokens and logout.
 
-Approx file sizes in kb:
-
-| File | Debug | Release | Release + minified
-| --- | --- | --- | --- |
-| wasm | 63 | 14 | 14
-| js | 363 | 363 | 113
-
-The js file bundles the `msal-browser.js` library.
-
 Methods names all match the `js` but with snake case, but unlike the `js` instead of a single `PublicClientApplication` type there are two app types:
 
 - `PopupApp`
@@ -61,3 +52,12 @@ let silent_token = client_app.acquire_token_silent(&silent_request).await.unwrap
 // Logout
 client_app.logout(None);
 ```
+
+Approx file sizes in kb:
+
+| File | Debug | Release | Release + minified
+| --- | --- | --- | --- |
+| wasm | 63 | 14 | 14
+| js | 363 | 363 | 113
+
+The js file bundles the `msal-browser.js` library.

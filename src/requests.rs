@@ -1,5 +1,5 @@
 use crate::{msal, AccountInfo};
-use msal::{JsHashMapStrStr, JsArrayString};
+use msal::{JsArrayString, JsHashMapStrStr};
 use std::{borrow::Cow, collections::HashMap};
 
 pub enum ResponseMode {
@@ -18,7 +18,25 @@ impl ResponseMode {
     }
 }
 
-// TODO: Add clone out method for setting js object values
+/// No scopes required since all the request constructors require Scopes
+struct IterBaseAuthRequest<'a, T> {
+    base_auth_request: &'a BaseAuthRequest<'a>,
+    destination: &'a T,
+    authority: &'a dyn Fn(&T, &Cow<'a, str>),
+    correlation_id: &'a dyn Fn(&T, &Cow<'a, str>),
+}
+
+impl<'a, T> IterBaseAuthRequest<'a, T> {
+    fn iter_all(self) {
+        if let Some(v) = &self.base_auth_request.authority {
+            (self.authority)(self.destination, v)
+        }
+        if let Some(v) = &self.base_auth_request.correlation_id {
+            (self.correlation_id)(self.destination, v)
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct BaseAuthRequest<'a> {
     scopes: Vec<Cow<'a, str>>, // Leave as Vec in case want to update as using?
@@ -58,16 +76,15 @@ where
     }
 }
 
-// TODO: Add clone out method for setting js object values since this is used by redirect request
 pub struct AuthorizationUrlRequest<'a> {
-    base_request: Cow<'a, BaseAuthRequest<'a>>, // Cow here to allow both types of From<..>
+    base_request: BaseAuthRequest<'a>, //TODO: Can I make this a reference?
     redirect_uri: Option<Cow<'a, str>>,
     extra_scopes_to_consent: Option<Vec<Cow<'a, str>>>,
     response_mode: Option<ResponseMode>,
     code_challenge: Option<Cow<'a, str>>,
     code_challenge_method: Option<Cow<'a, str>>,
     state: Option<Cow<'a, str>>,
-    prompt: Option<Cow<'a, str>>,
+    prompt: Option<Cow<'a, str>>, //TODO: this is an enum
     login_hint: Option<Cow<'a, str>>,
     domain_hint: Option<Cow<'a, str>>,
     extra_query_parameters: Option<HashMap<Cow<'a, str>, Cow<'a, str>>>, //TODO: Is this ok?
@@ -85,97 +102,102 @@ impl<'a> AuthorizationUrlRequest<'a> {
     }
 }
 
+/// This is here since it is used as the basis for other requests so I can avoid
+/// code duplication
+struct IterAuthorizationUrlRequest<'a, T> {
+    auth_url_request: &'a AuthorizationUrlRequest<'a>,
+    destination: &'a T,
+    base_request: IterBaseAuthRequest<'a, T>,
+    redirect_uri: &'a dyn Fn(&T, &Cow<'a, str>),
+    extra_scopes_to_consent: &'a dyn Fn(&T, &Vec<Cow<'a, str>>),
+    response_mode: &'a dyn Fn(&T, &ResponseMode),
+    code_challenge: &'a dyn Fn(&T, &Cow<'a, str>),
+    code_challenge_method: &'a dyn Fn(&T, &Cow<'a, str>),
+    state: &'a dyn Fn(&T, &Cow<'a, str>),
+    prompt: &'a dyn Fn(&T, &Cow<'a, str>),
+    login_hint: &'a dyn Fn(&T, &Cow<'a, str>),
+    domain_hint: &'a dyn Fn(&T, &Cow<'a, str>),
+    extra_query_parameters: &'a dyn Fn(&T, &HashMap<Cow<'a, str>, Cow<'a, str>>),
+    claims: &'a dyn Fn(&T, &Cow<'a, str>),
+    nonce: &'a dyn Fn(&T, &Cow<'a, str>),
+}
+
+impl<'a, T> IterAuthorizationUrlRequest<'a, T> {
+    fn iter_all(self) {
+        self.base_request.iter_all();
+        if let Some(v) = &self.auth_url_request.redirect_uri {
+            (self.redirect_uri)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.extra_scopes_to_consent {
+            (self.extra_scopes_to_consent)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.response_mode {
+            (self.response_mode)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.code_challenge {
+            (self.code_challenge)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.code_challenge_method {
+            (self.code_challenge_method)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.state {
+            (self.state)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.prompt {
+            (self.prompt)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.login_hint {
+            (self.login_hint)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.domain_hint {
+            (self.domain_hint)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.extra_query_parameters {
+            (self.extra_query_parameters)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.claims {
+            (self.claims)(self.destination, v)
+        }
+        if let Some(v) = &self.auth_url_request.nonce {
+            (self.nonce)(self.destination, v)
+        }
+    }
+}
+
 impl<'a> From<&'a AuthorizationUrlRequest<'a>> for msal::AuthorizationUrlRequest {
-    fn from(request: &'a AuthorizationUrlRequest) -> Self {
-        let auth_req = msal::AuthorizationUrlRequest::new(
+    fn from(request: &'a AuthorizationUrlRequest<'a>) -> Self {
+        let js = msal::AuthorizationUrlRequest::new(
             &JsArrayString::from(&request.base_request.scopes).into(),
         );
 
-        request
-            .base_request
-            .authority
-            .iter()
-            .for_each(|v| auth_req.set_authority(&v));
-
-        request
-            .base_request
-            .correlation_id
-            .iter()
-            .for_each(|v| auth_req.set_correlation_id(&v));
-
-        request
-            .redirect_uri
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_redirect_uri(v));
-
-        request
-            .extra_scopes_to_consent
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_extra_scopes_to_consent(JsArrayString::from(v).into()));
-
-        request
-            .response_mode
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_response_mode(v.as_str()));
-
-        request
-            .code_challenge
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_code_challenge(v));
-
-        request
-            .code_challenge_method
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_code_challenge_method(v));
-
-        request
-            .state
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_state(v));
-
-        request
-            .prompt
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_prompt(v));
-
-        request
-            .login_hint
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_login_hint(v));
-
-        request
-            .domain_hint
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_domain_hint(v));
-
-        request
-            .extra_query_parameters
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_extra_query_parameters(JsHashMapStrStr::from(v).into()));
-
-        request
-            .claims
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_claims(v));
-
-        request
-            .nonce
-            .as_ref()
-            .into_iter()
-            .for_each(|v| auth_req.set_nonce(v));
-
-        auth_req
+        IterAuthorizationUrlRequest {
+            auth_url_request: request,
+            destination: &js,
+            base_request: IterBaseAuthRequest {
+                base_auth_request: &request.base_request,
+                destination: &js,
+                authority: &|js, v| js.set_authority(v),
+                correlation_id: &|js, v| js.set_correlation_id(v),
+            },
+            redirect_uri: &|js, v| js.set_redirect_uri(v),
+            extra_scopes_to_consent: &|js, v| {
+                js.set_extra_scopes_to_consent(JsArrayString::from(v).into())
+            },
+            response_mode: &|js, v| js.set_response_mode(v.as_str()),
+            code_challenge: &|js, v| js.set_code_challenge(v),
+            code_challenge_method: &|js, v| js.set_code_challenge_method(v),
+            state: &|js, v| js.set_state(v),
+            prompt: &|js, v| js.set_prompt(v),
+            login_hint: &|js, v| js.set_login_hint(v),
+            domain_hint: &|js, v| js.set_domain_hint(v),
+            extra_query_parameters: &|js, v| {
+                js.set_extra_query_parameters(JsHashMapStrStr::from(v).into())
+            },
+            claims: &|js, v| js.set_claims(v),
+            nonce: &|js, v| js.set_nonce(v),
+        }
+        .iter_all();
+        js
     }
 }
 
@@ -185,7 +207,7 @@ where
 {
     fn from(scopes: &'a [T]) -> Self {
         Self {
-            base_request: Cow::Owned(scopes.into()),
+            base_request: scopes.into(),
             redirect_uri: None,
             extra_scopes_to_consent: None,
             response_mode: None,
@@ -205,7 +227,7 @@ where
 impl<'a> From<&'a BaseAuthRequest<'a>> for AuthorizationUrlRequest<'a> {
     fn from(base_request: &'a BaseAuthRequest<'a>) -> Self {
         Self {
-            base_request: Cow::Borrowed(base_request),
+            base_request: base_request.clone(),
             redirect_uri: None,
             extra_scopes_to_consent: None,
             response_mode: None,
@@ -242,12 +264,43 @@ where
 
 #[cfg(feature = "redirect")]
 impl<'a> From<&'a RedirectRequest<'a>> for msal::RedirectRequest {
-    // TODO: Add in all fields
     fn from(request: &'a RedirectRequest<'a>) -> Self {
-        let auth_req = msal::RedirectRequest::new(
+        let js = msal::RedirectRequest::new(
             &JsArrayString::from(&request.auth_url_req.base_request.scopes).into(),
         );
-        auth_req
+
+        IterAuthorizationUrlRequest {
+            auth_url_request: &request.auth_url_req,
+            destination: &js,
+            base_request: IterBaseAuthRequest {
+                base_auth_request: &request.auth_url_req.base_request,
+                destination: &js,
+                authority: &|js, v| js.set_authority(v),
+                correlation_id: &|js, v| js.set_correlation_id(v),
+            },
+            redirect_uri: &|js, v| js.set_redirect_uri(v),
+            extra_scopes_to_consent: &|js, v| {
+                js.set_extra_scopes_to_consent(JsArrayString::from(v).into())
+            },
+            response_mode: &|js, v| js.set_response_mode(v.as_str()),
+            code_challenge: &|js, v| js.set_code_challenge(v),
+            code_challenge_method: &|js, v| js.set_code_challenge_method(v),
+            state: &|js, v| js.set_state(v),
+            prompt: &|js, v| js.set_prompt(v),
+            login_hint: &|js, v| js.set_login_hint(v),
+            domain_hint: &|js, v| js.set_domain_hint(v),
+            extra_query_parameters: &|js, v| {
+                js.set_extra_query_parameters(JsHashMapStrStr::from(v).into())
+            },
+            claims: &|js, v| js.set_claims(v),
+            nonce: &|js, v| js.set_nonce(v),
+        }
+        .iter_all();
+
+        if let Some(v) = &request.redirect_start_page {
+            js.set_redirect_start_page(v)
+        }
+        js
     }
 }
 
@@ -288,29 +341,29 @@ impl<'a> SilentRequest<'a> {
 
 impl<'a> From<&'a SilentRequest<'a>> for msal::SilentRequest {
     fn from(request: &'a SilentRequest) -> Self {
-        let r = msal::SilentRequest::new(
+        let js = msal::SilentRequest::new(
             &JsArrayString::from(&request.base_request.scopes).into(),
             request.account.into(),
         );
-        request
-            .base_request
-            .authority
-            .iter()
-            .for_each(|v| r.set_authority(v));
-        request
-            .base_request
-            .correlation_id
-            .iter()
-            .for_each(|v| r.set_correlation_id(v));
+
+        IterBaseAuthRequest {
+            base_auth_request: request.base_request,
+            destination: &js,
+            authority: &|js, v| js.set_authority(v),
+            correlation_id: &|js, v| js.set_correlation_id(v),
+        }
+        .iter_all();
+
         request
             .force_refresh
             .into_iter()
-            .for_each(|v| r.set_force_refresh(v));
+            .for_each(|v| js.set_force_refresh(v));
+
         request
             .redirect_uri
             .iter()
-            .for_each(|v| r.set_redirect_uri(v));
-        r
+            .for_each(|v| js.set_redirect_uri(v));
+        js
     }
 }
 

@@ -325,6 +325,112 @@ extern "C" {
     #[wasm_bindgen(constructor)]
     pub fn new(scopes: &Array) -> RedirectRequest;
 
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn authority(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter)]
+    pub fn set_authority(this: &RedirectRequest, authority: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = correlationId)]
+    pub fn correlation_id(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = correlationId)]
+    pub fn set_correlation_id(this: &RedirectRequest, correlation_id: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = redirectUri)]
+    pub fn redirect_uri(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = redirectUri)]
+    pub fn set_redirect_uri(this: &RedirectRequest, redirect_uri: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = extraScopesToConsent)]
+    pub fn extra_scopes_to_consent(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = extraScopesToConsent)]
+    pub fn set_extra_scopes_to_consent(this: &RedirectRequest, extra_scopes_to_consent: Array);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = responseMode)]
+    pub fn response_mode(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = responseMode)]
+    pub fn set_response_mode(this: &RedirectRequest, response_mode: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = codeChallenge)]
+    pub fn code_challenge(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = codeChallenge)]
+    pub fn set_code_challenge(this: &RedirectRequest, code_challenge: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = codeChallengeMethod)]
+    pub fn code_challenge_method(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = codeChallengeMethod)]
+    pub fn set_code_challenge_method(this: &RedirectRequest, code_challenge_method: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn state(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter)]
+    pub fn set_state(this: &RedirectRequest, state: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn prompt(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter)]
+    pub fn set_prompt(this: &RedirectRequest, prompt: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = loginHint)]
+    pub fn login_hint(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = loginHint)]
+    pub fn set_login_hint(this: &RedirectRequest, login_hint: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = domainHint)]
+    pub fn domain_hint(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter = domainHint)]
+    pub fn set_domain_hint(this: &RedirectRequest, domain_hint: &str);
+
+    // Hashmap<&str, &str>
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = extraQueryParameters)]
+    pub fn extra_query_parameters(this: &RedirectRequest) -> Object;
+
+    #[wasm_bindgen(method, setter = extraQueryParameters)]
+    pub fn set_extra_query_parameters(this: &RedirectRequest, claims: Map);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn claims(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter)]
+    pub fn set_claims(this: &RedirectRequest, claims: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter)]
+    pub fn nonce(this: &RedirectRequest) -> String;
+
+    #[wasm_bindgen(method, setter)]
+    pub fn set_nonce(this: &RedirectRequest, nonce: &str);
+
+    #[cfg(test)]
+    #[wasm_bindgen(method, getter = redirectStartPage)]
+    pub fn redirect_start_page(this: &RedirectRequest) -> Option<String>;
+
+    #[wasm_bindgen(method, setter = redirectStartPage)]
+    pub fn set_redirect_start_page(this: &RedirectRequest, redirect_start_page: &str);
+
     // file://./..//node_modules/@azure/msal-browser/dist/src/request/SilentRequest.d.ts
     pub type SilentRequest;
 

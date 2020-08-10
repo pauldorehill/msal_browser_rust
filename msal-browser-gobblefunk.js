@@ -68,12 +68,26 @@ export class AuthorizationUrlRequest {
 
 /**
  * @param {[string]} scopes
- * @param {[string]} scopes
  */
 export class RedirectRequest {
     constructor(scopes) {
         this.scopes = scopes;
     }
+    authority;
+    correlationId;
+    redirectUri;
+    extraScopesToConsent;
+    responseMode;
+    codeChallenge;
+    codeChallengeMethod;
+    state;
+    prompt;
+    loginHint;
+    domainHint;
+    extraQueryParameters;
+    claims;
+    nonce;
+    redirectStartPage;
 }
 
 /**
