@@ -11,6 +11,28 @@ export class CacheOptions {
     cacheLocation;
     storeAuthStateInCookie;
 }
+// TODO: Not sure this is correct for an emum in js
+const LogLevel = {
+    Error: undefined,
+    Info: undefined,
+    Verbose: undefined,
+    Warning: undefined,
+}
+
+export class LoggerOptions {
+    loggerCallback;
+    piiLoggingEnabled;
+    logLevel;
+};
+
+export class BrowserSystemOptions {
+    // tokenRenewalOffsetSeconds;
+    loggerOptions;
+    // networkClient; hidden and never used
+    windowHashTimeout;
+    iframeHashTimeout;
+    loadFrameTimeout;
+};
 
 /**
  * @param {BrowserAuthOptions} browserAuthOptions

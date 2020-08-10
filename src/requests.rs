@@ -1,9 +1,6 @@
 use crate::{msal, AccountInfo};
-use msal::JsArrayString;
-use std::{
-    borrow::{Borrow, Cow},
-    collections::HashMap,
-};
+use msal::{JsHashMapStrStr, JsArrayString};
+use std::{borrow::Cow, collections::HashMap};
 
 pub enum ResponseMode {
     Query,
@@ -11,8 +8,8 @@ pub enum ResponseMode {
     FormPost,
 }
 
-impl Borrow<str> for ResponseMode {
-    fn borrow(&self) -> &str {
+impl ResponseMode {
+    fn as_str(&self) -> &str {
         match &self {
             ResponseMode::Query => "query",
             ResponseMode::Fragment => "fragment",
@@ -21,6 +18,7 @@ impl Borrow<str> for ResponseMode {
     }
 }
 
+// TODO: Add clone out method for setting js object values
 #[derive(Clone)]
 pub struct BaseAuthRequest<'a> {
     scopes: Vec<Cow<'a, str>>, // Leave as Vec in case want to update as using?
@@ -51,7 +49,7 @@ where
     T: Into<Cow<'a, str>> + std::clone::Clone,
 {
     fn from(scopes: &'a [T]) -> Self {
-        let scopes: Vec<Cow<'a, str>> = scopes.iter().cloned().map(|s| s.into()).collect();
+        let scopes: Vec<Cow<'a, str>> = scopes.iter().cloned().map(|v| v.into()).collect();
         Self {
             scopes,
             authority: None,
@@ -60,7 +58,7 @@ where
     }
 }
 
-#[allow(dead_code)] //TODO: Remove this
+// TODO: Add clone out method for setting js object values since this is used by redirect request
 pub struct AuthorizationUrlRequest<'a> {
     base_request: Cow<'a, BaseAuthRequest<'a>>, // Cow here to allow both types of From<..>
     redirect_uri: Option<Cow<'a, str>>,
@@ -88,7 +86,6 @@ impl<'a> AuthorizationUrlRequest<'a> {
 }
 
 impl<'a> From<&'a AuthorizationUrlRequest<'a>> for msal::AuthorizationUrlRequest {
-    // TODO: Add in all fields
     fn from(request: &'a AuthorizationUrlRequest) -> Self {
         let auth_req = msal::AuthorizationUrlRequest::new(
             &JsArrayString::from(&request.base_request.scopes).into(),
@@ -98,19 +95,85 @@ impl<'a> From<&'a AuthorizationUrlRequest<'a>> for msal::AuthorizationUrlRequest
             .base_request
             .authority
             .iter()
-            .for_each(|s| auth_req.set_authority(&s));
+            .for_each(|v| auth_req.set_authority(&v));
 
         request
             .base_request
             .correlation_id
             .iter()
-            .for_each(|s| auth_req.set_correlation_id(&s));
+            .for_each(|v| auth_req.set_correlation_id(&v));
+
+        request
+            .redirect_uri
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_redirect_uri(v));
+
+        request
+            .extra_scopes_to_consent
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_extra_scopes_to_consent(JsArrayString::from(v).into()));
+
+        request
+            .response_mode
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_response_mode(v.as_str()));
+
+        request
+            .code_challenge
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_code_challenge(v));
+
+        request
+            .code_challenge_method
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_code_challenge_method(v));
+
+        request
+            .state
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_state(v));
+
+        request
+            .prompt
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_prompt(v));
 
         request
             .login_hint
-            .as_deref()
+            .as_ref()
             .into_iter()
-            .for_each(|s| auth_req.set_login_hint(s));
+            .for_each(|v| auth_req.set_login_hint(v));
+
+        request
+            .domain_hint
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_domain_hint(v));
+
+        request
+            .extra_query_parameters
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_extra_query_parameters(JsHashMapStrStr::from(v).into()));
+
+        request
+            .claims
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_claims(v));
+
+        request
+            .nonce
+            .as_ref()
+            .into_iter()
+            .for_each(|v| auth_req.set_nonce(v));
 
         auth_req
     }
@@ -158,7 +221,6 @@ impl<'a> From<&'a BaseAuthRequest<'a>> for AuthorizationUrlRequest<'a> {
         }
     }
 }
-#[allow(dead_code)]
 #[cfg(feature = "redirect")]
 pub struct RedirectRequest<'a> {
     auth_url_req: AuthorizationUrlRequest<'a>,

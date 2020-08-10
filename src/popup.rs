@@ -88,14 +88,11 @@ mod tests {
 
     use super::*;
     use wasm_bindgen_test::*;
-
-    const CLIENT_ID: &str = "MY_CLIENT_ID";
-    const AUTHORITY: &str = "MY_AUTHORITY";
-    const REDIRECT_URI: &str = "MY_REDIRECT_URI";
+    use crate::tests::*;
 
     #[wasm_bindgen_test]
     fn build_pub_client_full() {
-        let b = BrowserAuthOptions::from(CLIENT_ID)
+        let b = BrowserAuthOptions::from(tests::CLIENT_ID)
             .set_authority(AUTHORITY)
             .set_redirect_uri(REDIRECT_URI);
         let c = Configuration::from(b);

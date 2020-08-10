@@ -9,52 +9,59 @@ const LogLevel = {
 // The configuration object has the following structure, and can be passed into the PublicClientApplication constructor. 
 // The only required config parameter is the client ID of the application. 
 // Everything else is optional, but may be required depending on your tenant and application model.
-const msalConfig = {
-    auth: {
-        clientId: "enter_client_id_here",
-        authority: "https://login.microsoftonline.com/common",
-        knownAuthorities: ["a", "b"],
-        cloudDiscoveryMetadata: "cloudDiscoveryMetadata",
-        redirectUri: "enter_redirect_uri_here",
-        postLogoutRedirectUri: "enter_postlogout_uri_here",
-        navigateToLoginRequestUrl: true
-    },
-    cache: {
-        cacheLocation: "sessionStorage",
-        storeAuthStateInCookie: false
-    },
-    system: {
-        loggerOptions: {
-            /**
-         * @param {LogLevel} level
-         * @param {string} message
-         * @param {boolean} containsPii
-         */
-            loggerCallback: (level, message, containsPii) => {
-                if (containsPii) {
+
+const auth = {
+    clientId: "enter_client_id_here",
+    authority: "https://login.microsoftonline.com/common",
+    knownAuthorities: ["a", "b"],
+    cloudDiscoveryMetadata: "cloudDiscoveryMetadata",
+    redirectUri: "enter_redirect_uri_here",
+    postLogoutRedirectUri: "enter_postlogout_uri_here",
+    navigateToLoginRequestUrl: true
+}
+
+const cache = {
+    cacheLocation: "sessionStorage",
+    storeAuthStateInCookie: false
+}
+
+const system = {
+    loggerOptions: {
+        /**
+     * @param {LogLevel} level
+     * @param {string} message
+     * @param {boolean} containsPii
+     */
+        loggerCallback: (level, message, containsPii) => {
+            if (containsPii) {
+                return;
+            }
+            switch (level) {
+                case LogLevel.Error:
+                    console.error(message);
                     return;
-                }
-                switch (level) {
-                    case LogLevel.Error:
-                        console.error(message);
-                        return;
-                    case LogLevel.Info:
-                        console.info(message);
-                        return;
-                    case LogLevel.Verbose:
-                        console.debug(message);
-                        return;
-                    case LogLevel.Warning:
-                        console.warn(message);
-                        return;
-                }
-            },
-            piiLoggingEnabled: false
+                case LogLevel.Info:
+                    console.info(message);
+                    return;
+                case LogLevel.Verbose:
+                    console.debug(message);
+                    return;
+                case LogLevel.Warning:
+                    console.warn(message);
+                    return;
+            }
         },
-        windowHashTimeout: 60000,
-        iframeHashTimeout: 6000,
-        loadFrameTimeout: 0
+        piiLoggingEnabled: false
     },
+    windowHashTimeout: 60000,
+    iframeHashTimeout: 6000,
+    loadFrameTimeout: 0
+}
+
+const msalConfig = {
+    auth: auth,
+    cache: cache,
+    system: system,
 }
 
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/access-tokens
@@ -208,4 +215,4 @@ const completeToken = {
     hasgroups: true,
 }
 
-export { msalConfig, authResponse, accessToken, idToken, completeToken }
+export { msalConfig, authResponse, accessToken, idToken, completeToken, auth, cache, system }

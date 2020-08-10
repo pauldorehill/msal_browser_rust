@@ -2,33 +2,53 @@
 mod msal;
 
 #[cfg(feature = "popup")]
-pub mod popup_app;
+pub mod popup;
 #[cfg(feature = "redirect")]
-pub mod redirect_app;
+pub mod redirect;
 pub mod requests;
 
 use js_sys::{Array, Date, Object};
 use msal::JsArrayString;
 use requests::*;
 use std::borrow::{Borrow, Cow};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use wasm_bindgen::{JsCast, JsValue};
 
 pub struct BrowserAuthOptions<'a> {
     client_id: Cow<'a, str>,
     authority: Option<Cow<'a, str>>,
+    known_authorities: Option<Vec<Cow<'a, str>>>,
+    cloud_discovery_metadata: Option<Cow<'a, str>>,
     redirect_uri: Option<Cow<'a, str>>,
+    post_logout_redirect_uri: Option<Cow<'a, str>>,
+    navigate_tologin_request_url: Option<bool>,
 }
 
 impl<'a> From<BrowserAuthOptions<'a>> for msal::BrowserAuthOptions {
     fn from(auth_options: BrowserAuthOptions) -> Self {
         let auth = msal::BrowserAuthOptions::new(&auth_options.client_id);
-        auth_options.authority.iter().for_each(|a| {
-            auth.set_authority(a);
+
+        auth_options.authority.iter().for_each(|v| {
+            auth.set_authority(v);
+        });
+        auth_options.known_authorities.iter().for_each(|v| {
+            auth.set_known_authorities(JsArrayString::from(v).into());
+        });
+        auth_options.cloud_discovery_metadata.iter().for_each(|v| {
+            auth.set_cloud_discovery_metadata(v);
         });
         auth_options.redirect_uri.iter().for_each(|uri| {
             auth.set_redirect_uri(uri);
         });
+        auth_options.post_logout_redirect_uri.iter().for_each(|v| {
+            auth.set_post_logout_redirect_uri(v);
+        });
+        auth_options
+            .navigate_tologin_request_url
+            .iter()
+            .for_each(|v| {
+                auth.set_navigate_tologin_request_url(*v);
+            });
         auth
     }
 }
@@ -38,13 +58,18 @@ impl<'a> From<msal::BrowserAuthOptions> for BrowserAuthOptions<'a> {
         Self {
             client_id: Cow::from(auth.client_id()),
             authority: auth.authority().map(Cow::from),
+            known_authorities: auth
+                .known_authorities()
+                .map(|v| JsArrayString::from(v).into()),
+            cloud_discovery_metadata: auth.cloud_discovery_metadata().map(Cow::from),
             redirect_uri: auth.redirect_uri().map(Cow::from),
+            post_logout_redirect_uri: auth.post_logout_redirect_uri().map(Cow::from),
+            navigate_tologin_request_url: auth.navigate_tologin_request_url(),
         }
     }
 }
 
 impl<'a> BrowserAuthOptions<'a> {
-    // Small strings so don't worry about 'leaked' memory on replace
     fn ref_set_authority<T>(&mut self, authority: T)
     where
         T: Into<Cow<'a, str>>,
@@ -60,18 +85,48 @@ impl<'a> BrowserAuthOptions<'a> {
         self
     }
 
-    fn ref_set_redirect_uri<T>(&mut self, redirect_uri: T)
+    pub fn set_known_authorities<T>(mut self, known_authorities: &[T]) -> Self
+    where
+        T: Into<Cow<'a, str>> + std::clone::Clone,
+    {
+        let xs = known_authorities
+            .to_vec()
+            .into_iter()
+            .map(|v| v.into())
+            .collect();
+        self.known_authorities = Some(xs);
+        self
+    }
+
+    pub fn set_cloud_discovery_metadata<T>(mut self, cloud_discovery_metadata: T) -> Self
     where
         T: Into<Cow<'a, str>>,
     {
-        self.redirect_uri = Some(redirect_uri.into());
+        self.cloud_discovery_metadata = Some(cloud_discovery_metadata.into());
+        self
     }
 
     pub fn set_redirect_uri<T>(mut self, redirect_uri: T) -> Self
     where
         T: Into<Cow<'a, str>>,
     {
-        self.ref_set_redirect_uri(redirect_uri);
+        self.redirect_uri = Some(redirect_uri.into());
+        self
+    }
+
+    pub fn set_post_logout_redirect_uri<T>(mut self, post_logout_redirect_uri: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        self.post_logout_redirect_uri = Some(post_logout_redirect_uri.into());
+        self
+    }
+
+    pub fn set_navigate_tologin_request_url<T>(
+        mut self,
+        navigate_tologin_request_url: bool,
+    ) -> Self {
+        self.navigate_tologin_request_url = Some(navigate_tologin_request_url);
         self
     }
 }
@@ -84,7 +139,11 @@ where
         Self {
             client_id: client_id.into(),
             authority: None,
+            known_authorities: None,
+            cloud_discovery_metadata: None,
             redirect_uri: None,
+            post_logout_redirect_uri: None,
+            navigate_tologin_request_url: None,
         }
     }
 }
@@ -94,11 +153,27 @@ pub enum CacheLocation {
     Local,
 }
 
+impl CacheLocation {
+    const SESSION: &'static str = "sessionStorage";
+    const LOCAL: &'static str = "localStorage";
+}
+
 impl Borrow<str> for CacheLocation {
     fn borrow(&self) -> &str {
         match &self {
-            CacheLocation::Session => "sessionStorage",
-            CacheLocation::Local => "localStorage",
+            CacheLocation::Session => Self::SESSION,
+            CacheLocation::Local => Self::LOCAL,
+        }
+    }
+}
+
+impl TryFrom<String> for CacheLocation {
+    type Error = String;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            Self::LOCAL => Ok(Self::Local),
+            Self::SESSION => Ok(Self::Session),
+            _ => Err("Input not valid".into()),
         }
     }
 }
@@ -137,17 +212,88 @@ impl From<CacheOptions> for msal::CacheOptions {
     }
 }
 
-// TODO: Add in all fields
+impl From<msal::CacheOptions> for CacheOptions {
+    fn from(cache: msal::CacheOptions) -> Self {
+        Self {
+            cache_location: cache.cache_location().and_then(|v| v.try_into().ok()),
+            store_auth_state_in_cookie: cache.store_auth_state_in_cookie(),
+        }
+    }
+}
+
+// TODO: Hook all these up
+pub enum LogLevel {
+    Error,
+    Warning,
+    Info,
+    Verbose,
+}
+
+pub struct LoggerOptions<'a> {
+    logger_callback: Option<&'a dyn Fn(LogLevel, &str, bool)>,
+    pii_logging_enabled: Option<bool>,
+    log_level: Option<LogLevel>,
+}
+
+// TODO: is u32 correct for these? Add logger options
+// TODO: Work out how to pass functions in and out
+struct BrowserSystemOptions {
+    // token_renewal_offset_seconds: Option<u32>,
+    // logger_options: Option<LoggerOptions<'a>>,
+    window_hash_timeout: Option<u32>,
+    iframe_hash_timeout: Option<u32>,
+    load_frame_timeout: Option<u32>,
+}
+
+impl From<msal::BrowserSystemOptions> for BrowserSystemOptions {
+    fn from(system: msal::BrowserSystemOptions) -> Self {
+        Self {
+            // logger_options: (),
+            window_hash_timeout: system.window_hash_timeout(),
+            iframe_hash_timeout: system.iframe_hash_timeout(),
+            load_frame_timeout: system.load_frame_timeout(),
+        }
+    }
+}
+
+impl From<BrowserSystemOptions> for msal::BrowserSystemOptions {
+    fn from(system: BrowserSystemOptions) -> Self {
+        let js_system = msal::BrowserSystemOptions::new();
+        system
+            .window_hash_timeout
+            .into_iter()
+            .for_each(|v| js_system.set_window_hash_timeout(v));
+        system
+            .iframe_hash_timeout
+            .into_iter()
+            .for_each(|v| js_system.set_iframe_hash_timeout(v));
+        system
+            .load_frame_timeout
+            .into_iter()
+            .for_each(|v| js_system.set_load_frame_timeout(v));
+        js_system
+    }
+}
+
 #[allow(dead_code)]
 pub struct Configuration<'a> {
     auth: BrowserAuthOptions<'a>,
     cache: Option<CacheOptions>,
-    // system: Option<BrowserSystemOptions>,
+    system: Option<BrowserSystemOptions>,
 }
 
 impl<'a> From<Configuration<'a>> for msal::Configuration {
     fn from(config: Configuration) -> Self {
-        msal::Configuration::new(&config.auth.into())
+        let js = msal::Configuration::new(&config.auth.into());
+        config
+            .cache
+            .into_iter()
+            .for_each(|v| js.set_cache(v.into()));
+        config
+            .system
+            .into_iter()
+            .for_each(|v| js.set_system(v.into()));
+        js
     }
 }
 
@@ -155,7 +301,8 @@ impl<'a> From<msal::Configuration> for Configuration<'a> {
     fn from(config: msal::Configuration) -> Self {
         Self {
             auth: config.auth().into(),
-            cache: None,
+            cache: config.cache().map(Into::into),
+            system: config.system().map(Into::into),
         }
     }
 }
@@ -176,14 +323,6 @@ impl<'a> Configuration<'a> {
         self.auth.ref_set_authority(authority);
         self
     }
-
-    pub fn set_redirect_uri<T>(mut self, redirect_uri: T) -> Self
-    where
-        T: Into<Cow<'a, str>>,
-    {
-        self.auth.ref_set_redirect_uri(redirect_uri);
-        self
-    }
 }
 
 impl<'a> From<BrowserAuthOptions<'a>> for Configuration<'a> {
@@ -191,6 +330,7 @@ impl<'a> From<BrowserAuthOptions<'a>> for Configuration<'a> {
         Self {
             auth: browser_auth_options,
             cache: None,
+            system: None,
         }
     }
 }
@@ -417,7 +557,6 @@ impl From<Object> for TokenClaims {
 
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
-#[allow(dead_code)] //TODO add getters
 pub struct AuthenticationResult {
     unique_id: String,
     tenant_id: String,
@@ -442,11 +581,47 @@ impl AuthenticationResult {
         &self.tenant_id
     }
 
+    pub fn scopes(&self) -> &Vec<String> {
+        &self.scopes
+    }
+
+    pub fn account(&self) -> &AccountInfo {
+        &self.account
+    }
+
+    pub fn id_token(&self) -> &str {
+        &self.id_token
+    }
+
+    pub fn id_token_claims(&self) -> &TokenClaims {
+        &self.id_token_claims
+    }
+
+    pub fn access_token(&self) -> &str {
+        &self.access_token
+    }
+
+    pub fn from_cache(&self) -> &bool {
+        &self.from_cache
+    }
+
     pub fn expires_on(&self) -> &Date {
         &self.expires_on
     }
-    //TODO: Add all getters
+
+    pub fn ext_expires_on(&self) -> Option<&Date> {
+        self.ext_expires_on.as_ref()
+    }
+
+    pub fn state(&self) -> Option<&str> {
+        self.state.as_deref()
+    }
+
+    pub fn family_id(&self) -> Option<&str> {
+        self.family_id.as_deref()
+    }
 }
+
 impl From<msal::AuthenticationResult> for AuthenticationResult {
     fn from(auth_result: msal::AuthenticationResult) -> Self {
         Self {
@@ -566,10 +741,10 @@ impl From<msal::AccountInfo> for AccountInfo {
 impl<'a> From<&'a AccountInfo> for msal::AccountInfo {
     fn from(account_info: &'a AccountInfo) -> Self {
         msal::AccountInfo::new(
-            account_info.home_account_id.to_owned(),
-            account_info.environment.to_owned(),
-            account_info.tenant_id.to_owned(),
-            account_info.username.to_owned(),
+            &account_info.home_account_id,
+            &account_info.environment,
+            &account_info.tenant_id,
+            &account_info.username,
         )
     }
 }
@@ -584,7 +759,7 @@ impl AccountInfo {
 }
 
 pub mod prelude {
-    pub use crate::popup_app::PopupApp;
+    pub use crate::popup::PopupApp;
     pub use crate::requests::*;
     pub use crate::{
         AccountInfo, AuthenticationResult, BrowserAuthOptions, Configuration,
@@ -602,6 +777,8 @@ mod tests {
     use wasm_bindgen::prelude::*;
     use wasm_bindgen_test::*;
 
+    pub const CLIENT_ID: &str = "MY_CLIENT_ID";
+    pub const REDIRECT_URI: &str = "MY_REDIRECT_URI";
     pub const HOME_ACCOUNT_ID: &str = "home_account_id";
     pub const ENVIRONMENT: &str = "environment";
     pub const TENANT_ID: &str = "tenant_id";
@@ -609,25 +786,28 @@ mod tests {
     pub const SCOPE: &str = "scope";
     pub const AUTHORITY: &str = "authority";
     pub const CORRELATION_ID: &str = "correlation_id";
-    pub const POST_LOGOUT_URI: &str = "correlation_id";
+    pub const POST_LOGOUT_URI: &str = "POST_LOGOUT_URI";
 
     #[wasm_bindgen(module = "/msal-object-examples.js")]
     extern "C" {
         static authResponse: Object;
+        static auth: Object;
+        static cache: Object;
+        static system: Object;
         static msalConfig: Object;
     }
 
-    fn home_account_id(i: usize) -> String {
-        format!("home_account_id_{}", i)
+    fn home_account_id<'a>(i: usize) -> Cow<'a, str> {
+        format!("home_account_id_{}", i).into()
     }
-    fn environment(i: usize) -> String {
-        format!("environment_{}", i)
+    fn environment<'a>(i: usize) -> Cow<'a, str> {
+        format!("environment_{}", i).into()
     }
-    fn tenant_id(i: usize) -> String {
-        format!("tenant_id_{}", i)
+    fn tenant_id<'a>(i: usize) -> Cow<'a, str> {
+        format!("tenant_id_{}", i).into()
     }
-    fn username(i: usize) -> String {
-        format!("username_{}", i)
+    fn username<'a>(i: usize) -> Cow<'a, str> {
+        format!("username_{}", i).into()
     }
 
     pub fn account() -> AccountInfo {
@@ -652,10 +832,10 @@ mod tests {
     // Make on the Js side
     fn make_account_info_in_js_land(i: usize) -> msal::AccountInfo {
         msal::AccountInfo::new(
-            home_account_id(i),
-            environment(i),
-            tenant_id(i),
-            username(i),
+            &home_account_id(i),
+            &environment(i),
+            &tenant_id(i),
+            &username(i),
         )
     }
 
@@ -695,22 +875,33 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn parse_config_result() {
+    fn parse_browser_auth_options() {
+        let _: BrowserAuthOptions = auth
+            .clone()
+            .unchecked_into::<msal::BrowserAuthOptions>()
+            .into();
+        // TODO: Check the values
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_cache_options() {
+        let _: CacheOptions = cache.clone().unchecked_into::<msal::CacheOptions>().into();
+        // TODO: Check the values
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_system() {
+        let _: BrowserSystemOptions = cache
+            .clone()
+            .unchecked_into::<msal::BrowserSystemOptions>()
+            .into();
+        // TODO: Check the values
+    }
+
+    #[wasm_bindgen_test]
+    fn configuration() {
         let _: Configuration = msalConfig.clone().try_into().unwrap();
     }
 
-    #[wasm_bindgen_test]
-    fn mirror_cache_options() {
-        // TODO: Write tests
-    }
-
-    #[wasm_bindgen_test]
-    fn mirror_browser_auth_options() {
-        // TODO: Write tests
-    }
-
-    #[wasm_bindgen_test]
-    fn mirror_configuration() {
-        // TODO: Write tests
-    }
+    // TODO: Add a suite of integration tests to ensure the API is stable?
 }

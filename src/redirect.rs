@@ -1,5 +1,6 @@
 use crate::{
-    acquire_token_silent, msal, msal::Msal,
+    acquire_token_silent, msal,
+    msal::Msal,
     requests::{AuthorizationUrlRequest, RedirectRequest, SilentRequest},
     sso_silent, AuthenticationResult, Configuration, PublicClientApplication,
 };
@@ -17,19 +18,20 @@ where
     // on_redirect_error: Option<FErr>,
 }
 
-impl<FSuccess> Msal for RedirectApp<FSuccess> 
-where FSuccess: Fn(AuthenticationResult),
+impl<FSuccess> Msal for RedirectApp<FSuccess>
+where
+    FSuccess: Fn(AuthenticationResult),
 {
     fn auth(&self) -> &msal::PublicClientApplication {
         &self.auth
     }
 }
 
-impl<FSuccess> PublicClientApplication for RedirectApp<FSuccess>
-where
-    FSuccess: Fn(AuthenticationResult),
+impl<FSuccess> PublicClientApplication for RedirectApp<FSuccess> where
+    FSuccess: Fn(AuthenticationResult)
     // FErr: Fn(JsValue),
-{}
+{
+}
 
 impl<FSuccess> RedirectApp<FSuccess>
 where
@@ -98,11 +100,8 @@ mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;
+    use crate::tests::*;
     use wasm_bindgen_test::*;
-    
-    const CLIENT_ID: &str = "MY_CLIENT_ID";
-    const AUTHORITY: &str = "MY_AUTHORITY";
-    // const REDIRECT_URI: &str = "MY_REDIRECT_URI";
 
     #[allow(unused_must_use)]
     #[wasm_bindgen_test]
