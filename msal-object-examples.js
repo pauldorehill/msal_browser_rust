@@ -58,7 +58,7 @@ const system = {
     loadFrameTimeout: 0
 }
 
-const msalConfig = {
+const config = {
     auth: auth,
     cache: cache,
     system: system,
@@ -215,4 +215,4 @@ const completeToken = {
     hasgroups: true,
 }
 
-export { msalConfig, authResponse, accessToken, idToken, completeToken, auth, cache, system }
+export { config, authResponse, accessToken, idToken, completeToken, auth, cache, system }

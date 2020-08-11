@@ -26,10 +26,6 @@ use wasm_bindgen::JsCast;
 
 pub trait Msal {
     fn auth(&self) -> &PublicClientApplication;
-
-    fn empty_request() -> AuthorizationUrlRequest {
-        AuthorizationUrlRequest::new(&Array::new())
-    }
 }
 
 #[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
@@ -587,9 +583,11 @@ extern "C" {
     pub fn family_id(this: &AuthenticationResult) -> Option<String>;
 }
 
-/// Here to allow passing in a scopes array on domain request
-impl From<Vec<String>> for AuthorizationUrlRequest {
-    fn from(scopes: Vec<String>) -> Self {
+impl<'a, T> From<&'a [T]> for AuthorizationUrlRequest
+where
+    T: Into<String> + Clone,
+{
+    fn from(scopes: &'a [T]) -> Self {
         let js: JsArrayString = scopes.into();
         AuthorizationUrlRequest::new(&js.into())
     }
@@ -606,18 +604,11 @@ where
 }
 
 /// These are so can use From<T>
-#[derive(Clone)]
 pub(crate) struct JsArrayString(pub Vec<String>);
 
 impl From<String> for JsArrayString {
     fn from(scope: String) -> Self {
         Self(vec![scope])
-    }
-}
-
-impl From<&str> for JsArrayString {
-    fn from(scope: &str) -> Self {
-        vec![scope.to_string()].into()
     }
 }
 
@@ -627,9 +618,12 @@ impl<'a> From<&'a Vec<Cow<'a, str>>> for JsArrayString {
     }
 }
 
-impl From<Vec<String>> for JsArrayString {
-    fn from(scopes: Vec<String>) -> Self {
-        JsArrayString(scopes)
+impl<'a, T> From<&'a [T]> for JsArrayString
+where
+    T: Clone + Into<String>,
+{
+    fn from(scopes: &'a [T]) -> Self {
+        Self(scopes.iter().cloned().map(|s| s.into()).collect())
     }
 }
 

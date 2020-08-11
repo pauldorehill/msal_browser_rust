@@ -1,6 +1,10 @@
 //! msal-browser.js in Rust WASM
 mod msal;
 
+// TODO: Many uses of unchecked_into... might be better to do something else:
+// Maybe consider https://docs.rs/js-sys/0.3.44/js_sys/Reflect/index.html
+// https://rustwasm.github.io/docs/wasm-bindgen/reference/working-with-duck-typed-interfaces.html
+
 #[cfg(feature = "popup")]
 pub mod popup;
 #[cfg(feature = "redirect")]
@@ -28,27 +32,24 @@ impl<'a> From<BrowserAuthOptions<'a>> for msal::BrowserAuthOptions {
     fn from(auth_options: BrowserAuthOptions) -> Self {
         let auth = msal::BrowserAuthOptions::new(&auth_options.client_id);
 
-        auth_options.authority.iter().for_each(|v| {
+        if let Some(v) = &auth_options.authority {
             auth.set_authority(v);
-        });
-        auth_options.known_authorities.iter().for_each(|v| {
-            auth.set_known_authorities(JsArrayString::from(v).into());
-        });
-        auth_options.cloud_discovery_metadata.iter().for_each(|v| {
-            auth.set_cloud_discovery_metadata(v);
-        });
-        auth_options.redirect_uri.iter().for_each(|uri| {
-            auth.set_redirect_uri(uri);
-        });
-        auth_options.post_logout_redirect_uri.iter().for_each(|v| {
-            auth.set_post_logout_redirect_uri(v);
-        });
-        auth_options
-            .navigate_tologin_request_url
-            .iter()
-            .for_each(|v| {
-                auth.set_navigate_tologin_request_url(*v);
-            });
+        }
+        if let Some(v) = &auth_options.known_authorities {
+            auth.set_known_authorities(JsArrayString::from(v).into())
+        }
+        if let Some(v) = &auth_options.cloud_discovery_metadata {
+            auth.set_cloud_discovery_metadata(v)
+        }
+        if let Some(v) = &auth_options.redirect_uri {
+            auth.set_redirect_uri(v)
+        }
+        if let Some(v) = &auth_options.post_logout_redirect_uri {
+            auth.set_post_logout_redirect_uri(v)
+        }
+        if let Some(v) = &auth_options.navigate_tologin_request_url {
+            auth.set_navigate_tologin_request_url(*v)
+        }
         auth
     }
 }
@@ -70,18 +71,26 @@ impl<'a> From<msal::BrowserAuthOptions> for BrowserAuthOptions<'a> {
 }
 
 impl<'a> BrowserAuthOptions<'a> {
-    fn ref_set_authority<T>(&mut self, authority: T)
+    pub fn new<T>(client_id: T) -> Self
     where
         T: Into<Cow<'a, str>>,
     {
-        self.authority = Some(authority.into())
+        Self {
+            client_id: client_id.into(),
+            authority: None,
+            known_authorities: None,
+            cloud_discovery_metadata: None,
+            redirect_uri: None,
+            post_logout_redirect_uri: None,
+            navigate_tologin_request_url: None,
+        }
     }
 
     pub fn set_authority<T>(mut self, authority: T) -> Self
     where
         T: Into<Cow<'a, str>>,
     {
-        self.ref_set_authority(authority);
+        self.authority = Some(authority.into());
         self
     }
 
@@ -131,23 +140,6 @@ impl<'a> BrowserAuthOptions<'a> {
     }
 }
 
-impl<'a, T> From<T> for BrowserAuthOptions<'a>
-where
-    T: Into<Cow<'a, str>>,
-{
-    fn from(client_id: T) -> Self {
-        Self {
-            client_id: client_id.into(),
-            authority: None,
-            known_authorities: None,
-            cloud_discovery_metadata: None,
-            redirect_uri: None,
-            post_logout_redirect_uri: None,
-            navigate_tologin_request_url: None,
-        }
-    }
-}
-
 pub enum CacheLocation {
     Session,
     Local,
@@ -178,7 +170,6 @@ impl TryFrom<String> for CacheLocation {
     }
 }
 
-//TODO: Change to builder?
 #[derive(Default)]
 pub struct CacheOptions {
     cache_location: Option<CacheLocation>,
@@ -200,14 +191,12 @@ impl CacheOptions {
 impl From<CacheOptions> for msal::CacheOptions {
     fn from(cache_options: CacheOptions) -> Self {
         let cache = msal::CacheOptions::new();
-        cache_options
-            .cache_location
-            .iter()
-            .for_each(|v| cache.set_cache_location(v.borrow()));
-        cache_options
-            .store_auth_state_in_cookie
-            .iter()
-            .for_each(|v| cache.set_store_auth_state_in_cookie(*v));
+        if let Some(v) = cache_options.cache_location {
+            cache.set_cache_location(v.borrow())
+        }
+        if let Some(v) = cache_options.store_auth_state_in_cookie {
+            cache.set_store_auth_state_in_cookie(v)
+        }
         cache
     }
 }
@@ -235,14 +224,22 @@ pub struct LoggerOptions<'a> {
     log_level: Option<LogLevel>,
 }
 
-// TODO: is u32 correct for these? Add logger options
-// TODO: Work out how to pass functions in and out
-struct BrowserSystemOptions {
+// TODO: Work out how to pass functions in and out: add logger options
+// TODO: is u32 correct for these?
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
+#[derive(Default)]
+pub struct BrowserSystemOptions {
     // token_renewal_offset_seconds: Option<u32>,
     // logger_options: Option<LoggerOptions<'a>>,
     window_hash_timeout: Option<u32>,
     iframe_hash_timeout: Option<u32>,
     load_frame_timeout: Option<u32>,
+}
+
+impl BrowserSystemOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 impl From<msal::BrowserSystemOptions> for BrowserSystemOptions {
@@ -259,40 +256,55 @@ impl From<msal::BrowserSystemOptions> for BrowserSystemOptions {
 impl From<BrowserSystemOptions> for msal::BrowserSystemOptions {
     fn from(system: BrowserSystemOptions) -> Self {
         let js_system = msal::BrowserSystemOptions::new();
-        system
-            .window_hash_timeout
-            .into_iter()
-            .for_each(|v| js_system.set_window_hash_timeout(v));
-        system
-            .iframe_hash_timeout
-            .into_iter()
-            .for_each(|v| js_system.set_iframe_hash_timeout(v));
-        system
-            .load_frame_timeout
-            .into_iter()
-            .for_each(|v| js_system.set_load_frame_timeout(v));
+        if let Some(v) = system.window_hash_timeout {
+            js_system.set_window_hash_timeout(v)
+        }
+        if let Some(v) = system.iframe_hash_timeout {
+            js_system.set_iframe_hash_timeout(v)
+        }
+        if let Some(v) = system.load_frame_timeout {
+            js_system.set_load_frame_timeout(v)
+        }
         js_system
     }
 }
 
-#[allow(dead_code)]
 pub struct Configuration<'a> {
     auth: BrowserAuthOptions<'a>,
     cache: Option<CacheOptions>,
     system: Option<BrowserSystemOptions>,
 }
 
+impl<'a> Configuration<'a> {
+    pub fn new(
+        auth: BrowserAuthOptions<'a>,
+        cache: Option<CacheOptions>,
+        system: Option<BrowserSystemOptions>,
+    ) -> Self {
+        Self {
+            auth,
+            cache,
+            system,
+        }
+    }
+    
+    // TODO: This will panic, rather than error! So I changed from TryFrom
+    // Tried using `panic::catch_unwind` but doesn't catch it?
+    /// This can cause a runtime exception
+    pub fn unchecked_from(js_obj: &Object) -> Self {
+        js_obj.clone().unchecked_into::<msal::Configuration>().into()
+    }
+}
+
 impl<'a> From<Configuration<'a>> for msal::Configuration {
     fn from(config: Configuration) -> Self {
         let js = msal::Configuration::new(&config.auth.into());
-        config
-            .cache
-            .into_iter()
-            .for_each(|v| js.set_cache(v.into()));
-        config
-            .system
-            .into_iter()
-            .for_each(|v| js.set_system(v.into()));
+        if let Some(v) = config.cache {
+            js.set_cache(v.into())
+        }
+        if let Some(v) = config.system {
+            js.set_system(v.into())
+        }
         js
     }
 }
@@ -307,41 +319,6 @@ impl<'a> From<msal::Configuration> for Configuration<'a> {
     }
 }
 
-impl<'a> TryFrom<Object> for Configuration<'a> {
-    type Error = JsValue;
-    fn try_from(js_obj: Object) -> Result<Self, Self::Error> {
-        let v: Configuration = js_obj.unchecked_into::<msal::Configuration>().into();
-        Ok(v)
-    }
-}
-
-impl<'a> Configuration<'a> {
-    pub fn set_authority<T>(mut self, authority: T) -> Self
-    where
-        T: Into<Cow<'a, str>>,
-    {
-        self.auth.ref_set_authority(authority);
-        self
-    }
-}
-
-impl<'a> From<BrowserAuthOptions<'a>> for Configuration<'a> {
-    fn from(browser_auth_options: BrowserAuthOptions<'a>) -> Self {
-        Self {
-            auth: browser_auth_options,
-            cache: None,
-            system: None,
-        }
-    }
-}
-
-impl<'a> From<&'a str> for Configuration<'a> {
-    fn from(client_id: &'a str) -> Self {
-        let b: BrowserAuthOptions = client_id.into();
-        b.into()
-    }
-}
-
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/access-tokens
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-optional-claims#configuring-directory-extension-optional-claims
@@ -352,7 +329,7 @@ impl<'a> From<&'a str> for Configuration<'a> {
 /// Covers all the claims as per the  IETF spec. If the claim doesn't match any of the standard ones
 /// it will return `Custom::(claim_name, claim_value)`
 /// Adds the azure specific ones too
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum TokenClaim {
     typ, // Always JWT
@@ -545,6 +522,7 @@ impl From<JsValue> for TokenClaim {
     }
 }
 
+#[derive(Clone)]
 pub struct TokenClaims(pub Vec<TokenClaim>);
 
 impl From<Object> for TokenClaims {
@@ -557,6 +535,7 @@ impl From<Object> for TokenClaims {
 
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
+#[derive(Clone)]
 pub struct AuthenticationResult {
     unique_id: String,
     tenant_id: String,
@@ -725,6 +704,13 @@ impl AccountInfo {
     pub fn username(&self) -> &str {
         &self.username
     }
+    
+    fn from_array(array: Array) -> Vec<Self> {
+        array
+            .iter()
+            .map(|v| v.unchecked_into::<msal::AccountInfo>().into())
+            .collect()
+    }
 }
 
 impl From<msal::AccountInfo> for AccountInfo {
@@ -749,15 +735,6 @@ impl<'a> From<&'a AccountInfo> for msal::AccountInfo {
     }
 }
 
-impl AccountInfo {
-    pub fn from_array(array: Array) -> Vec<Self> {
-        array
-            .iter()
-            .map(|v| v.unchecked_into::<msal::AccountInfo>().into())
-            .collect()
-    }
-}
-
 pub mod prelude {
     pub use crate::popup::PopupApp;
     pub use crate::requests::*;
@@ -773,7 +750,6 @@ mod tests {
 
     use crate::*;
     use js_sys::Object;
-    use std::convert::TryInto;
     use wasm_bindgen::prelude::*;
     use wasm_bindgen_test::*;
 
@@ -794,7 +770,7 @@ mod tests {
         static auth: Object;
         static cache: Object;
         static system: Object;
-        static msalConfig: Object;
+        static config: Object;
     }
 
     fn home_account_id<'a>(i: usize) -> Cow<'a, str> {
@@ -899,8 +875,8 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn configuration() {
-        let _: Configuration = msalConfig.clone().try_into().unwrap();
+    fn configuration<'a>() {
+        let _: Configuration = Configuration::unchecked_from(&config);
     }
 
     // TODO: Add a suite of integration tests to ensure the API is stable?

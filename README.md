@@ -12,7 +12,7 @@ The `PopupApp` is a the default feature: if you want to use the `RedirectApp` it
 msal_browser = { version = "0.1", features = ["redirect"] }
 ```
 
-There are a huge amount of [`Configuration`](https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md) options so the rust side uses a builder pattern. You can also use a js `Object` and call `Configuration::TryFrom<Object>`.
+There are a huge amount of [`Configuration`](https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md) options so the rust side uses a builder pattern. You can also use a js `Object` and call `Configuration::unchecked_from`.
 
 To use:
 
@@ -21,11 +21,12 @@ To use:
 const CLIENT_ID: &str = "YOUR_CLIENT_ID";
 const AUTHORITY: &str = "YOUR_AUTHORITY";
 
-// Setup App and build
-let auth_options = BrowserAuthOptions::from(CLIENT_ID).set_authority(AUTHORITY);
-let config = Configuration::from(auth_options);
+// Setup App
+let auth_options = BrowserAuthOptions::new(CLIENT_ID).set_authority(AUTHORITY);
+let config = Configuration::new(auth_options, None, None);
 let client_app = PopupApp::new(config);
 
+// Define some scopes
 let scopes = ["User.Read"];
 
 // Login
@@ -35,10 +36,8 @@ let auth_res = client_app.login_popup().await.unwrap();
 let account = &client_app.get_all_accounts().unwrap()[0];
 
 // Setup some requests
-let base_request = BaseAuthRequest::from(&scopes[..]);
-let auth_request =
-    AuthorizationUrlRequest::from(&base_request).set_login_hint(account.username());
-let silent_request = SilentRequest::from_account_info(&base_request, account);
+let auth_request = AuthorizationUrlRequest::new(&scopes[..]).set_login_hint(account.username());
+let silent_request = SilentRequest::new(&scopes[..], account);
 
 // SSO sign in
 let sso_auth_result = client_app.sso_silent(&auth_request).await.unwrap();
@@ -47,7 +46,10 @@ let sso_auth_result = client_app.sso_silent(&auth_request).await.unwrap();
 let token = client_app.acquire_token_popup(&auth_request).await.unwrap();
 
 // Silent token
-let silent_token = client_app.acquire_token_silent(&silent_request).await.unwrap();
+let silent_token = client_app
+    .acquire_token_silent(&silent_request)
+    .await
+    .unwrap();
 
 // Logout
 client_app.logout(None);

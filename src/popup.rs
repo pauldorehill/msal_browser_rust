@@ -2,7 +2,7 @@ use crate::{
     acquire_token_silent, msal,
     msal::Msal,
     requests::{AuthorizationUrlRequest, SilentRequest},
-    sso_silent, AuthenticationResult, BrowserAuthOptions, Configuration, PublicClientApplication,
+    sso_silent, AuthenticationResult, Configuration, PublicClientApplication,
 };
 use wasm_bindgen::JsValue;
 
@@ -26,16 +26,17 @@ impl PopupApp {
     }
 
     pub async fn login_popup(&self) -> Result<AuthenticationResult, JsValue> {
-        self.auth
-            .login_popup(Self::empty_request())
-            .await
-            .map(Into::into)
+        let scopes: [&str; 0] = [];
+        self.login_popup_with_scopes(&scopes).await
     }
 
-    pub async fn login_popup_with_scopes(
+    pub async fn login_popup_with_scopes<'a, T>(
         &self,
-        scopes: Vec<String>,
-    ) -> Result<AuthenticationResult, JsValue> {
+        scopes: &'a [T],
+    ) -> Result<AuthenticationResult, JsValue>
+    where
+        T: Into<String> + Clone,
+    {
         self.auth.login_popup(scopes.into()).await.map(Into::into)
     }
 
@@ -64,55 +65,24 @@ impl PopupApp {
     }
 }
 
-impl<'a> From<&'a str> for PopupApp {
-    fn from(client_id: &'a str) -> Self {
-        Self::new(client_id.into())
-    }
-}
-
-impl<'a> From<Configuration<'a>> for PopupApp {
-    fn from(configuration: Configuration) -> Self {
-        PopupApp::new(configuration)
-    }
-}
-
-impl<'a> From<BrowserAuthOptions<'a>> for PopupApp {
-    fn from(browser_auth_options: BrowserAuthOptions) -> Self {
-        Configuration::from(browser_auth_options).into()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     wasm_bindgen_test_configure!(run_in_browser);
 
     use super::*;
+    use crate::{tests::*, BrowserAuthOptions};
     use wasm_bindgen_test::*;
-    use crate::tests::*;
 
     #[wasm_bindgen_test]
     fn build_pub_client_full() {
-        let b = BrowserAuthOptions::from(tests::CLIENT_ID)
+        let b = BrowserAuthOptions::new(tests::CLIENT_ID)
             .set_authority(AUTHORITY)
             .set_redirect_uri(REDIRECT_URI);
-        let c = Configuration::from(b);
+        let c = Configuration::new(b, None, None);
         let client_app = PopupApp::new(c);
         assert_eq!(client_app.client_id(), CLIENT_ID);
         assert_eq!(client_app.authority().unwrap(), AUTHORITY);
         assert_eq!(client_app.redirect_uri().unwrap(), REDIRECT_URI);
-    }
-
-    #[wasm_bindgen_test]
-    fn build_pub_client_from_config() {
-        let config = Configuration::from(CLIENT_ID).set_authority(AUTHORITY);
-        let client_app = PopupApp::from(config);
-        assert_eq!(client_app.client_id(), CLIENT_ID);
-    }
-
-    #[wasm_bindgen_test]
-    fn build_pub_client_from_string() {
-        let client_app = PopupApp::from(CLIENT_ID);
-        assert_eq!(client_app.client_id(), CLIENT_ID);
     }
 
     // How to correctly test these? Since require user input...
@@ -120,8 +90,11 @@ mod tests {
     #[allow(unused_must_use)]
     #[wasm_bindgen_test]
     async fn login_popup() {
-        let config = Configuration::from(CLIENT_ID).set_authority(AUTHORITY);
-        let client_app = PopupApp::from(config);
+        let b = BrowserAuthOptions::new(tests::CLIENT_ID)
+            .set_authority(AUTHORITY)
+            .set_redirect_uri(REDIRECT_URI);
+        let c = Configuration::new(b, None, None);
+        let client_app = PopupApp::new(c);
         client_app.login_popup();
     }
 }

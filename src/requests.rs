@@ -2,6 +2,7 @@ use crate::{msal, AccountInfo};
 use msal::{JsArrayString, JsHashMapStrStr};
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Clone)]
 pub enum ResponseMode {
     Query,
     Fragment,
@@ -16,6 +17,13 @@ impl ResponseMode {
             ResponseMode::FormPost => "form_post",
         }
     }
+}
+
+#[derive(Clone)]
+pub struct BaseAuthRequest<'a> {
+    scopes: Vec<Cow<'a, str>>, // TODO: Can this be a slice?
+    authority: Option<Cow<'a, str>>,
+    correlation_id: Option<Cow<'a, str>>,
 }
 
 /// No scopes required since all the request constructors require Scopes
@@ -37,73 +45,99 @@ impl<'a, T> IterBaseAuthRequest<'a, T> {
     }
 }
 
-#[derive(Clone)]
-pub struct BaseAuthRequest<'a> {
-    scopes: Vec<Cow<'a, str>>, // Leave as Vec in case want to update as using?
-    authority: Option<Cow<'a, str>>,
-    correlation_id: Option<Cow<'a, str>>,
+pub trait SetBaseAuthrequest<'a> {
+    fn base_request(&mut self) -> &mut BaseAuthRequest<'a>;
+
+    fn set_authority<T>(mut self, authority: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.base_request().authority = Some(authority.into());
+        self
+    }
+
+    fn set_correlation_id<T>(mut self, correlation_id: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.base_request().correlation_id = Some(correlation_id.into());
+        self
+    }
 }
 
 impl<'a> BaseAuthRequest<'a> {
-    pub fn set_authority<T>(mut self, authority: T) -> Self
+    fn new<T>(scopes: &'a [T]) -> Self
     where
-        T: Into<Cow<'a, str>>,
+        T: Clone + Into<Cow<'a, str>>,
     {
-        self.authority = Some(authority.into());
-        self
-    }
-
-    pub fn set_correlation_id<T>(mut self, correlation_id: T) -> Self
-    where
-        T: Into<Cow<'a, str>>,
-    {
-        self.correlation_id = Some(correlation_id.into());
-        self
-    }
-}
-
-impl<'a, T> From<&'a [T]> for BaseAuthRequest<'a>
-where
-    T: Into<Cow<'a, str>> + std::clone::Clone,
-{
-    fn from(scopes: &'a [T]) -> Self {
-        let scopes: Vec<Cow<'a, str>> = scopes.iter().cloned().map(|v| v.into()).collect();
         Self {
-            scopes,
+            scopes: scopes.into_iter().cloned().map(Into::into).collect(),
             authority: None,
             correlation_id: None,
         }
     }
 }
 
+#[derive(Clone)]
+pub enum Prompt {
+    Login,
+    None,
+    Consent,
+    SelectAccount,
+}
+
+impl Prompt {
+    fn as_str(&self) -> &str {
+        match &self {
+            Prompt::Login => "login",
+            Prompt::None => "none",
+            Prompt::Consent => "consent",
+            Prompt::SelectAccount => "select_account",
+        }
+    }
+}
+#[derive(Clone)]
 pub struct AuthorizationUrlRequest<'a> {
-    base_request: BaseAuthRequest<'a>, //TODO: Can I make this a reference?
+    base_request: BaseAuthRequest<'a>,
     redirect_uri: Option<Cow<'a, str>>,
     extra_scopes_to_consent: Option<Vec<Cow<'a, str>>>,
     response_mode: Option<ResponseMode>,
     code_challenge: Option<Cow<'a, str>>,
     code_challenge_method: Option<Cow<'a, str>>,
     state: Option<Cow<'a, str>>,
-    prompt: Option<Cow<'a, str>>, //TODO: this is an enum
+    prompt: Option<Prompt>,
     login_hint: Option<Cow<'a, str>>,
     domain_hint: Option<Cow<'a, str>>,
-    extra_query_parameters: Option<HashMap<Cow<'a, str>, Cow<'a, str>>>, //TODO: Is this ok?
+    extra_query_parameters: Option<HashMap<Cow<'a, str>, Cow<'a, str>>>,
     claims: Option<Cow<'a, str>>,
     nonce: Option<Cow<'a, str>>,
 }
 
 impl<'a> AuthorizationUrlRequest<'a> {
-    pub fn set_login_hint<T>(mut self, login_hint: T) -> Self
+    pub fn new<T>(scopes: &'a [T]) -> Self
     where
-        T: Into<Cow<'a, str>>,
+        T: Clone + Into<Cow<'a, str>>,
     {
-        self.login_hint = Some(login_hint.into());
-        self
+        Self {
+            base_request: BaseAuthRequest::new(scopes),
+            redirect_uri: None,
+            extra_scopes_to_consent: None,
+            response_mode: None,
+            code_challenge: None,
+            code_challenge_method: None,
+            state: None,
+            prompt: None,
+            login_hint: None,
+            domain_hint: None,
+            extra_query_parameters: None,
+            claims: None,
+            nonce: None,
+        }
     }
 }
 
-/// This is here since it is used as the basis for other requests so I can avoid
-/// code duplication
 struct IterAuthorizationUrlRequest<'a, T> {
     auth_url_request: &'a AuthorizationUrlRequest<'a>,
     destination: &'a T,
@@ -114,7 +148,7 @@ struct IterAuthorizationUrlRequest<'a, T> {
     code_challenge: &'a dyn Fn(&T, &Cow<'a, str>),
     code_challenge_method: &'a dyn Fn(&T, &Cow<'a, str>),
     state: &'a dyn Fn(&T, &Cow<'a, str>),
-    prompt: &'a dyn Fn(&T, &Cow<'a, str>),
+    prompt: &'a dyn Fn(&T, &'a str),
     login_hint: &'a dyn Fn(&T, &Cow<'a, str>),
     domain_hint: &'a dyn Fn(&T, &Cow<'a, str>),
     extra_query_parameters: &'a dyn Fn(&T, &HashMap<Cow<'a, str>, Cow<'a, str>>),
@@ -144,7 +178,7 @@ impl<'a, T> IterAuthorizationUrlRequest<'a, T> {
             (self.state)(self.destination, v)
         }
         if let Some(v) = &self.auth_url_request.prompt {
-            (self.prompt)(self.destination, v)
+            (self.prompt)(self.destination, v.as_str())
         }
         if let Some(v) = &self.auth_url_request.login_hint {
             (self.login_hint)(self.destination, v)
@@ -161,6 +195,138 @@ impl<'a, T> IterAuthorizationUrlRequest<'a, T> {
         if let Some(v) = &self.auth_url_request.nonce {
             (self.nonce)(self.destination, v)
         }
+    }
+}
+
+pub trait SetAuthorizationUrlRequest<'a> {
+    fn auth_request(&mut self) -> &mut AuthorizationUrlRequest<'a>;
+
+    fn set_redirect_uri<T>(mut self, redirect_uri: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().redirect_uri = Some(redirect_uri.into());
+        self
+    }
+
+    fn set_extra_scopes_to_consent<T>(mut self, extra_scopes_to_consent: &'a [T]) -> Self
+    where
+        T: Into<Cow<'a, str>> + Clone,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().extra_scopes_to_consent = Some(
+            extra_scopes_to_consent
+                .iter()
+                .cloned()
+                .map(|v| v.into())
+                .collect(),
+        );
+        self
+    }
+
+    fn set_response_mode(mut self, response_mode: ResponseMode) -> Self
+    where
+        Self: std::marker::Sized,
+    {
+        self.auth_request().response_mode = Some(response_mode);
+        self
+    }
+
+    fn set_code_challenge<T>(mut self, code_challenge: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().code_challenge = Some(code_challenge.into());
+        self
+    }
+
+    fn set_code_challenge_method<T>(mut self, code_challenge_method: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().code_challenge_method = Some(code_challenge_method.into());
+        self
+    }
+
+    fn set_state<T>(mut self, state: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().state = Some(state.into());
+        self
+    }
+
+    fn set_prompt<T>(mut self, prompt: Prompt) -> Self
+    where
+        Self: std::marker::Sized,
+    {
+        self.auth_request().prompt = Some(prompt);
+        self
+    }
+
+    fn set_login_hint<T>(mut self, login_hint: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().login_hint = Some(login_hint.into());
+        self
+    }
+
+    fn set_domain_hint<T>(mut self, domain_hint: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().domain_hint = Some(domain_hint.into());
+        self
+    }
+
+    fn set_extra_query_parameters<T>(mut self, extra_query_parameters: HashMap<T, T>) -> Self
+    where
+        T: Into<Cow<'a, str>> + Clone,
+        Self: std::marker::Sized,
+    {
+        let mut hm: HashMap<Cow<'a, str>, Cow<'a, str>> = HashMap::new();
+        for (k, v) in extra_query_parameters {
+            hm.insert(k.into(), v.into());
+        }
+        self.auth_request().extra_query_parameters = Some(hm);
+        self
+    }
+
+    fn set_claims<T>(mut self, claims: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().claims = Some(claims.into());
+        self
+    }
+
+    fn set_nonce<T>(mut self, nonce: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        Self: std::marker::Sized,
+    {
+        self.auth_request().nonce = Some(nonce.into());
+        self
+    }
+}
+
+impl<'a> SetAuthorizationUrlRequest<'a> for AuthorizationUrlRequest<'a> {
+    fn auth_request(&mut self) -> &mut AuthorizationUrlRequest<'a> {
+        self
+    }
+}
+
+impl<'a> SetBaseAuthrequest<'a> for AuthorizationUrlRequest<'a> {
+    fn base_request(&mut self) -> &mut BaseAuthRequest<'a> {
+        &mut self.base_request
     }
 }
 
@@ -201,64 +367,37 @@ impl<'a> From<&'a AuthorizationUrlRequest<'a>> for msal::AuthorizationUrlRequest
     }
 }
 
-impl<'a, T> From<&'a [T]> for AuthorizationUrlRequest<'a>
-where
-    T: Into<Cow<'a, str>> + std::clone::Clone,
-{
-    fn from(scopes: &'a [T]) -> Self {
-        Self {
-            base_request: scopes.into(),
-            redirect_uri: None,
-            extra_scopes_to_consent: None,
-            response_mode: None,
-            code_challenge: None,
-            code_challenge_method: None,
-            state: None,
-            prompt: None,
-            login_hint: None,
-            domain_hint: None,
-            extra_query_parameters: None,
-            claims: None,
-            nonce: None,
-        }
-    }
-}
-
-impl<'a> From<&'a BaseAuthRequest<'a>> for AuthorizationUrlRequest<'a> {
-    fn from(base_request: &'a BaseAuthRequest<'a>) -> Self {
-        Self {
-            base_request: base_request.clone(),
-            redirect_uri: None,
-            extra_scopes_to_consent: None,
-            response_mode: None,
-            code_challenge: None,
-            code_challenge_method: None,
-            state: None,
-            prompt: None,
-            login_hint: None,
-            domain_hint: None,
-            extra_query_parameters: None,
-            claims: None,
-            nonce: None,
-        }
-    }
-}
 #[cfg(feature = "redirect")]
+#[derive(Clone)]
 pub struct RedirectRequest<'a> {
     auth_url_req: AuthorizationUrlRequest<'a>,
     redirect_start_page: Option<Cow<'a, str>>,
 }
 
 #[cfg(feature = "redirect")]
-impl<'a, T> From<&'a [T]> for RedirectRequest<'a>
-where
-    T: Into<Cow<'a, str>> + std::clone::Clone,
-{
-    fn from(scopes: &'a [T]) -> Self {
+impl<'a> RedirectRequest<'a> {
+    pub fn new<T>(scopes: &'a [T]) -> Self
+    where
+        T: Clone + Into<Cow<'a, str>>,
+    {
         Self {
-            auth_url_req: scopes.into(),
+            auth_url_req: AuthorizationUrlRequest::new(scopes),
             redirect_start_page: None,
         }
+    }
+}
+
+#[cfg(feature = "redirect")]
+impl<'a> SetBaseAuthrequest<'a> for RedirectRequest<'a> {
+    fn base_request(&mut self) -> &mut BaseAuthRequest<'a> {
+        &mut self.auth_url_req.base_request
+    }
+}
+
+#[cfg(feature = "redirect")]
+impl<'a> SetAuthorizationUrlRequest<'a> for RedirectRequest<'a> {
+    fn auth_request(&mut self) -> &mut AuthorizationUrlRequest<'a> {
+        &mut self.auth_url_req
     }
 }
 
@@ -306,19 +445,25 @@ impl<'a> From<&'a RedirectRequest<'a>> for msal::RedirectRequest {
 
 #[derive(Clone)]
 pub struct SilentRequest<'a> {
-    base_request: &'a BaseAuthRequest<'a>,
+    base_request: BaseAuthRequest<'a>,
     account: &'a AccountInfo,
     force_refresh: Option<bool>,
     redirect_uri: Option<Cow<'a, str>>,
 }
 
+impl<'a> SetBaseAuthrequest<'a> for SilentRequest<'a> {
+    fn base_request(&mut self) -> &mut BaseAuthRequest<'a> {
+        &mut self.base_request
+    }
+}
+
 impl<'a> SilentRequest<'a> {
-    pub fn from_account_info(
-        base_request: &'a BaseAuthRequest<'a>,
-        account_info: &'a AccountInfo,
-    ) -> Self {
+    pub fn new<T>(scopes: &'a [T], account_info: &'a AccountInfo) -> Self
+    where
+        T: Clone + Into<Cow<'a, str>>,
+    {
         Self {
-            base_request,
+            base_request: BaseAuthRequest::new(scopes),
             account: account_info,
             force_refresh: None,
             redirect_uri: None,
@@ -347,22 +492,19 @@ impl<'a> From<&'a SilentRequest<'a>> for msal::SilentRequest {
         );
 
         IterBaseAuthRequest {
-            base_auth_request: request.base_request,
+            base_auth_request: &request.base_request,
             destination: &js,
             authority: &|js, v| js.set_authority(v),
             correlation_id: &|js, v| js.set_correlation_id(v),
         }
         .iter_all();
 
-        request
-            .force_refresh
-            .into_iter()
-            .for_each(|v| js.set_force_refresh(v));
-
-        request
-            .redirect_uri
-            .iter()
-            .for_each(|v| js.set_redirect_uri(v));
+        if let Some(v) = request.force_refresh {
+            js.set_force_refresh(v)
+        }
+        if let Some(v) = &request.redirect_uri {
+            js.set_redirect_uri(v)
+        }
         js
     }
 }
@@ -376,6 +518,10 @@ pub struct EndSessionRequest<'a> {
 }
 
 impl<'a> EndSessionRequest<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn set_account(mut self, account: &'a AccountInfo) -> Self {
         self.account = Some(account);
         self
@@ -408,23 +554,20 @@ impl<'a> EndSessionRequest<'a> {
 
 impl<'a> From<EndSessionRequest<'a>> for msal::EndSessionRequest {
     fn from(request: EndSessionRequest) -> Self {
-        let r = msal::EndSessionRequest::new();
-        request.account.iter().for_each(|&v| {
-            r.set_account(v.into());
-        });
-        request
-            .post_logout_redirect_uri
-            .into_iter()
-            .for_each(|v| r.set_post_logout_redirect_uri(&v));
-        request
-            .authority
-            .into_iter()
-            .for_each(|v| r.set_authority(&v));
-        request
-            .correlation_id
-            .into_iter()
-            .for_each(|v| r.set_correlation_id(&v));
-        r
+        let js = msal::EndSessionRequest::new();
+        if let Some(v) = request.account {
+            js.set_account(v.into())
+        }
+        if let Some(v) = &request.post_logout_redirect_uri {
+            js.set_post_logout_redirect_uri(&v)
+        }
+        if let Some(v) = &request.authority {
+            js.set_authority(&v)
+        }
+        if let Some(v) = &request.correlation_id {
+            js.set_correlation_id(&v)
+        }
+        js
     }
 }
 
@@ -441,6 +584,7 @@ mod test_request {
 
     #[wasm_bindgen_test]
     fn mirror_auth_url_request() {
+        let _req = AuthorizationUrlRequest::new(&[SCOPE][..]);
         // TODO: Write tests
     }
 
@@ -449,19 +593,14 @@ mod test_request {
         // TODO: Write tests
     }
 
-    fn base_req() -> BaseAuthRequest<'static> {
-        BaseAuthRequest::from(&[SCOPE][..])
-            .set_authority(AUTHORITY)
-            .set_correlation_id(CORRELATION_ID)
-    }
-
     #[wasm_bindgen_test]
     fn mirror_silent_request() {
-        let base_req = base_req();
         let account = account();
-        let req = SilentRequest::from_account_info(&base_req, &account)
+        let req = SilentRequest::new(&[SCOPE][..], &account)
             .set_force_refresh(FORCE_REFRESH)
-            .set_redirect_uri(REDIRECT_URI);
+            .set_redirect_uri(REDIRECT_URI)
+            .set_correlation_id(CORRELATION_ID)
+            .set_authority(AUTHORITY);
 
         let js_req: msal::SilentRequest = (&req).into();
 
