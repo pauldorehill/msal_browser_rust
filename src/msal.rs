@@ -6,19 +6,12 @@
 //! Since the wasm object are pointers these methods fail.
 //! These are the exports:
 //! ```js
-//! exports.AuthError = AuthError;
-//! exports.AuthErrorMessage = AuthErrorMessage;
-//! exports.AuthenticationResult = AuthenticationResult;
-//! exports.BrowserAuthError = BrowserAuthError;
-//! exports.BrowserAuthErrorMessage = BrowserAuthErrorMessage;
-//! exports.BrowserConfigurationAuthError = BrowserConfigurationAuthError;
-//! exports.BrowserConfigurationAuthErrorMessage = BrowserConfigurationAuthErrorMessage;
-//! exports.InteractionRequiredAuthError = InteractionRequiredAuthError;
-//! exports.Logger = Logger;
-//! exports.PublicClientApplication = PublicClientApplication;
+//! export { AuthError, AuthErrorMessage, AuthenticationResult, BrowserAuthError, BrowserAuthErrorMessage, 
+//! BrowserConfigurationAuthError, BrowserConfigurationAuthErrorMessage, InteractionRequiredAuthError, 
+//! LogLevel, Logger, PublicClientApplication };
 //! ```
 
-use js_sys::{Array, Date, JsString, Map, Object};
+use js_sys::{Array, Date, JsString, Map, Object, Function};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -30,7 +23,6 @@ pub trait Msal {
 
 #[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
 extern "C" {
-
     // file://./../node_modules/@azure/msal-browser/dist/src/config/Configuration.d.ts
     pub type BrowserAuthOptions;
 
@@ -71,13 +63,13 @@ extern "C" {
     pub fn post_logout_redirect_uri(this: &BrowserAuthOptions) -> Option<String>;
 
     #[wasm_bindgen(method, setter = navigateToLoginRequestUrl)]
-    pub fn set_navigate_tologin_request_url(
+    pub fn set_navigate_to_login_request_url(
         this: &BrowserAuthOptions,
-        navigate_tologin_request_url: bool,
+        navigate_to_login_request_url: bool,
     );
 
     #[wasm_bindgen(method, getter = navigateToLoginRequestUrl)]
-    pub fn navigate_tologin_request_url(this: &BrowserAuthOptions) -> Option<bool>;
+    pub fn navigate_to_login_request_url(this: &BrowserAuthOptions) -> Option<bool>;
 
     pub type CacheOptions;
 
@@ -100,12 +92,18 @@ extern "C" {
 
     #[wasm_bindgen(constructor)]
     pub fn new() -> BrowserSystemOptions;
+    
+    #[wasm_bindgen(method, setter = loggerOptions)]
+    pub fn set_logger_options(this: &BrowserSystemOptions, logger_options: LoggerOptions);
+    
+    #[wasm_bindgen(method, getter = loggerOptions)]
+    pub fn logger_options(this: &BrowserSystemOptions) -> Option<LoggerOptions>;
 
-    // #[wasm_bindgen(method, setter = loggerOptions)]
-    // pub fn set_logger_options(this: &BrowserSystemOptions, logger_options: Function);
+    #[wasm_bindgen(method, setter = tokenRenewalOffsetSeconds)]
+    pub fn set_token_renewal_offset_seconds(this: &BrowserSystemOptions, logger_options: u32);
 
-    // #[wasm_bindgen(method, getter = loggerOptions)]
-    // pub fn logger_options(this: &BrowserSystemOptions) -> Option<Function>;
+    #[wasm_bindgen(method, getter = tokenRenewalOffsetSeconds)]
+    pub fn token_renewal_offset_seconds(this: &BrowserSystemOptions) -> Option<u32>;
 
     #[wasm_bindgen(method, setter = windowHashTimeout)]
     pub fn set_window_hash_timeout(this: &BrowserSystemOptions, window_hash_timeout: u32);
@@ -469,6 +467,33 @@ extern "C" {
     #[wasm_bindgen(method, getter = redirectUri)]
     pub fn redirect_uri(request: &SilentRequest) -> Option<String>;
 
+    pub type LoggerOptions;
+
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> LoggerOptions;
+
+    #[wasm_bindgen(method, getter = loggerCallback)]
+    pub fn logger_callback(this: &LoggerOptions) -> Option<Function>;
+
+    #[wasm_bindgen(method, setter = loggerCallback)]
+    pub fn set_logger_callback_function(this: &LoggerOptions, logger_callback: &Function);
+
+    #[wasm_bindgen(method, setter = loggerCallback)]
+    pub fn set_logger_callback(this: &LoggerOptions, logger_callback: &Closure<dyn Fn(String, String, bool)>);
+
+    #[wasm_bindgen(method, getter = piiLoggingEnabled)]
+    pub fn pii_logging_enabled(this: &LoggerOptions) -> Option<bool>;
+
+    #[wasm_bindgen(method, setter = piiLoggingEnabled)]
+    pub fn set_pii_logging_enabled(this: &LoggerOptions, pii_logging_enabled: bool);
+
+    // Due to way enum is defined can return int or string
+    #[wasm_bindgen(method, getter = logLevel)]
+    pub fn log_level(this: &LoggerOptions) -> JsValue;
+
+    #[wasm_bindgen(method, setter = logLevel)]
+    pub fn set_log_level(this: &LoggerOptions, log_level: &str);
+
 }
 
 // file://./../node_modules/@azure/msal-browser/dist/index.es.js
@@ -581,6 +606,8 @@ extern "C" {
 
     #[wasm_bindgen(method, getter = familyId)]
     pub fn family_id(this: &AuthenticationResult) -> Option<String>;
+
+    pub type LogLevel;
 }
 
 impl<'a, T> From<&'a [T]> for AuthorizationUrlRequest
@@ -665,61 +692,18 @@ impl<'a> From<JsHashMapStrStr<'a>> for Map {
 
 #[cfg(test)]
 mod tests {
-    wasm_bindgen_test_configure!(run_in_browser);
+    // wasm_bindgen_test_configure!(run_in_browser);
 
-    use super::*;
-    use crate::{TokenClaim, TokenClaims};
-    use wasm_bindgen_test::*;
+    // use super::*;
+    // use crate::{TokenClaim, TokenClaims};
+    // use wasm_bindgen_test::*;
 
-    #[wasm_bindgen(module = "/msal-object-examples.js")]
-    extern "C" {
-        static accessToken: Object;
-        static idToken: Object;
-        static completeToken: Object;
-    }
+    // #[wasm_bindgen(module = "/msal-object-examples.js")]
+    // extern "C" {
+    //     static accessToken: Object;
+    //     static idToken: Object;
+    //     static completeToken: Object;
+    // }
 
-    #[wasm_bindgen_test]
-    fn parse_access_token() {
-        let _: TokenClaims = accessToken.clone().into();
-    }
 
-    #[wasm_bindgen_test]
-    fn parse_id_token() {
-        let _: TokenClaims = idToken.clone().into();
-    }
-
-    #[wasm_bindgen_test]
-    fn parse_claims() {
-        let id_claims: TokenClaims = idToken.clone().into();
-        let access_claims: TokenClaims = accessToken.clone().into();
-        let claim = id_claims
-            .0
-            .iter()
-            .find_map(|v| {
-                if let TokenClaim::alg(c) = v {
-                    Some(c)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        assert_eq!(claim, "RS256");
-
-        let no_custom = |claims: TokenClaims| {
-            claims.0.into_iter().find_map(|v| {
-                if let TokenClaim::custom(c, v) = v {
-                    Some((c, v))
-                } else {
-                    None
-                }
-            })
-        };
-
-        let all: TokenClaims = completeToken.clone().into();
-
-        // Check have found all azure claims, the source may not have them all though!
-        assert!(no_custom(id_claims).is_none());
-        assert!(no_custom(access_claims).is_none());
-        assert!(no_custom(all).is_none());
-    }
 }

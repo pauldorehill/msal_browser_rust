@@ -78,7 +78,7 @@ mod tests {
         let b = BrowserAuthOptions::new(tests::CLIENT_ID)
             .set_authority(AUTHORITY)
             .set_redirect_uri(REDIRECT_URI);
-        let c = Configuration::new(b, None, None);
+        let c = Configuration::new(b);
         let client_app = PopupApp::new(c);
         assert_eq!(client_app.client_id(), CLIENT_ID);
         assert_eq!(client_app.authority().unwrap(), AUTHORITY);
@@ -93,7 +93,7 @@ mod tests {
         let b = BrowserAuthOptions::new(tests::CLIENT_ID)
             .set_authority(AUTHORITY)
             .set_redirect_uri(REDIRECT_URI);
-        let c = Configuration::new(b, None, None);
+        let c = Configuration::new(b);
         let client_app = PopupApp::new(c);
         client_app.login_popup();
     }

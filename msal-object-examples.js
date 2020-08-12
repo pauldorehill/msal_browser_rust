@@ -1,14 +1,16 @@
-const LogLevel = {
-    Error: undefined,
-    Info: undefined,
-    Verbose: undefined,
-    Warning: undefined,
-}
-
 // https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md
 // The configuration object has the following structure, and can be passed into the PublicClientApplication constructor. 
 // The only required config parameter is the client ID of the application. 
 // Everything else is optional, but may be required depending on your tenant and application model.
+
+//Include here so that can be tested
+var LogLevel;
+(function (LogLevel) {
+    LogLevel[LogLevel["Error"] = 0] = "Error";
+    LogLevel[LogLevel["Warning"] = 1] = "Warning";
+    LogLevel[LogLevel["Info"] = 2] = "Info";
+    LogLevel[LogLevel["Verbose"] = 3] = "Verbose";
+})(LogLevel || (LogLevel = {}));
 
 const auth = {
     clientId: "enter_client_id_here",
@@ -27,11 +29,6 @@ const cache = {
 
 const system = {
     loggerOptions: {
-        /**
-     * @param {LogLevel} level
-     * @param {string} message
-     * @param {boolean} containsPii
-     */
         loggerCallback: (level, message, containsPii) => {
             if (containsPii) {
                 return;
@@ -51,14 +48,16 @@ const system = {
                     return;
             }
         },
-        piiLoggingEnabled: false
+        piiLoggingEnabled: false,
+        // @ts-ignore
+        logLevel: LogLevel.Error,
     },
     windowHashTimeout: 60000,
     iframeHashTimeout: 6000,
-    loadFrameTimeout: 0
+    loadFrameTimeout: 126,
 }
 
-const config = {
+const msalConfig = {
     auth: auth,
     cache: cache,
     system: system,
@@ -215,4 +214,4 @@ const completeToken = {
     hasgroups: true,
 }
 
-export { config, authResponse, accessToken, idToken, completeToken, auth, cache, system }
+export { msalConfig, authResponse, accessToken, idToken, completeToken, auth, cache, system }

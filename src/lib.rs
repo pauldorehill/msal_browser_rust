@@ -11,12 +11,12 @@ pub mod popup;
 pub mod redirect;
 pub mod requests;
 
-use js_sys::{Array, Date, Object};
+use js_sys::{Array, Date, Function, Object};
 use msal::JsArrayString;
 use requests::*;
 use std::borrow::{Borrow, Cow};
 use std::convert::{TryFrom, TryInto};
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 
 pub struct BrowserAuthOptions<'a> {
     client_id: Cow<'a, str>,
@@ -25,7 +25,7 @@ pub struct BrowserAuthOptions<'a> {
     cloud_discovery_metadata: Option<Cow<'a, str>>,
     redirect_uri: Option<Cow<'a, str>>,
     post_logout_redirect_uri: Option<Cow<'a, str>>,
-    navigate_tologin_request_url: Option<bool>,
+    navigate_to_login_request_url: Option<bool>,
 }
 
 impl<'a> From<BrowserAuthOptions<'a>> for msal::BrowserAuthOptions {
@@ -47,8 +47,8 @@ impl<'a> From<BrowserAuthOptions<'a>> for msal::BrowserAuthOptions {
         if let Some(v) = &auth_options.post_logout_redirect_uri {
             auth.set_post_logout_redirect_uri(v)
         }
-        if let Some(v) = &auth_options.navigate_tologin_request_url {
-            auth.set_navigate_tologin_request_url(*v)
+        if let Some(v) = &auth_options.navigate_to_login_request_url {
+            auth.set_navigate_to_login_request_url(*v)
         }
         auth
     }
@@ -65,7 +65,7 @@ impl<'a> From<msal::BrowserAuthOptions> for BrowserAuthOptions<'a> {
             cloud_discovery_metadata: auth.cloud_discovery_metadata().map(Cow::from),
             redirect_uri: auth.redirect_uri().map(Cow::from),
             post_logout_redirect_uri: auth.post_logout_redirect_uri().map(Cow::from),
-            navigate_tologin_request_url: auth.navigate_tologin_request_url(),
+            navigate_to_login_request_url: auth.navigate_to_login_request_url(),
         }
     }
 }
@@ -82,7 +82,7 @@ impl<'a> BrowserAuthOptions<'a> {
             cloud_discovery_metadata: None,
             redirect_uri: None,
             post_logout_redirect_uri: None,
-            navigate_tologin_request_url: None,
+            navigate_to_login_request_url: None,
         }
     }
 
@@ -131,11 +131,11 @@ impl<'a> BrowserAuthOptions<'a> {
         self
     }
 
-    pub fn set_navigate_tologin_request_url<T>(
+    pub fn set_navigate_to_login_request_url(
         mut self,
-        navigate_tologin_request_url: bool,
+        navigate_to_login_request_url: bool,
     ) -> Self {
-        self.navigate_tologin_request_url = Some(navigate_tologin_request_url);
+        self.navigate_to_login_request_url = Some(navigate_to_login_request_url);
         self
     }
 }
@@ -177,14 +177,18 @@ pub struct CacheOptions {
 }
 
 impl CacheOptions {
-    pub fn new(
-        cache_location: Option<CacheLocation>,
-        store_auth_state_in_cookie: Option<bool>,
-    ) -> Self {
-        Self {
-            cache_location,
-            store_auth_state_in_cookie,
-        }
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set_cache_location(mut self, cache_location: CacheLocation) -> Self {
+        self.cache_location = Some(cache_location);
+        self
+    }
+
+    pub fn set_store_auth_state_in_cookie(mut self, store_auth_state_in_cookie: bool) -> Self {
+        self.store_auth_state_in_cookie = Some(store_auth_state_in_cookie);
+        self
     }
 }
 
@@ -210,7 +214,6 @@ impl From<msal::CacheOptions> for CacheOptions {
     }
 }
 
-// TODO: Hook all these up
 pub enum LogLevel {
     Error,
     Warning,
@@ -218,10 +221,136 @@ pub enum LogLevel {
     Verbose,
 }
 
-pub struct LoggerOptions<'a> {
-    logger_callback: Option<&'a dyn Fn(LogLevel, &str, bool)>,
+impl LogLevel {
+    fn as_str<'a>(&self) -> &'a str {
+        match self {
+            LogLevel::Error => "Error",
+            LogLevel::Warning => "Warning",
+            LogLevel::Info => "Info",
+            LogLevel::Verbose => "Verbose",
+        }
+    }
+}
+
+impl TryFrom<String> for LogLevel {
+    type Error = ();
+    fn try_from(value: String) -> Result<Self, ()> {
+        value.as_str().try_into()
+    }
+}
+
+impl<'a> TryFrom<&'a str> for LogLevel {
+    type Error = ();
+    fn try_from(value: &'a str) -> Result<Self, ()> {
+        match value {
+            "Error" => Ok(LogLevel::Error),
+            "Warning" => Ok(LogLevel::Warning),
+            "Info" => Ok(LogLevel::Info),
+            "Verbose" => Ok(LogLevel::Verbose),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<f64> for LogLevel {
+    type Error = ();
+    fn try_from(value: f64) -> Result<Self, ()> {
+        match value as u64 {
+            0 => Ok(LogLevel::Error),
+            1 => Ok(LogLevel::Warning),
+            2 => Ok(LogLevel::Info),
+            3 => Ok(LogLevel::Verbose),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<JsValue> for LogLevel {
+    type Error = JsValue;
+    fn try_from(log_level: JsValue) -> Result<Self, JsValue> {
+        if let Some(v) = log_level.as_string() {
+            v.as_str().try_into().map_err(|_| log_level)
+        } else if let Some(v) = log_level.as_f64() {
+            v.try_into().map_err(|_| log_level)
+        } else {
+            Err(log_level)
+        }
+    }
+}
+
+// This is to allow loading from Js: might as well leave there
+enum LoggerCallback {
+    Js(Function),
+    WASM(&'static dyn Fn(LogLevel, String, bool)),
+}
+// I think that these must use heap allocated closures since they need to be long lived
+// https://rustwasm.github.io/docs/wasm-bindgen/reference/passing-rust-closures-to-js.html#heap-allocated-closures
+// https://docs.rs/wasm-bindgen/0.2.67/wasm_bindgen/closure/struct.Closure.html
+// Easiest to use owned values for the closure
+#[derive(Default)]
+pub struct LoggerOptions {
+    logger_callback: Option<LoggerCallback>,
     pii_logging_enabled: Option<bool>,
     log_level: Option<LogLevel>,
+}
+
+impl LoggerOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set_logger_callback(
+        mut self,
+        logger_callback: &'static dyn Fn(LogLevel, String, bool),
+    ) -> Self {
+        self.logger_callback = Some(LoggerCallback::WASM(logger_callback));
+        self
+    }
+
+    pub fn set_pii_logging_enabled(mut self, pii_logging_enabled: bool) -> Self {
+        self.pii_logging_enabled = Some(pii_logging_enabled);
+        self
+    }
+
+    pub fn set_log_level(mut self, log_level: LogLevel) -> Self {
+        self.log_level = Some(log_level);
+        self
+    }
+}
+impl From<LoggerOptions> for msal::LoggerOptions {
+    fn from(logger: LoggerOptions) -> Self {
+        let js = msal::LoggerOptions::new();
+        if let Some(f) = logger.logger_callback {
+            match f {
+                LoggerCallback::Js(f) => js.set_logger_callback_function(&f),
+                LoggerCallback::WASM(f) => {
+                    let f = move |log_level: String, message: String, pii| {
+                        f(log_level.try_into().unwrap(), message, pii)
+                    };
+                    js.set_logger_callback(&Closure::wrap(Box::new(f)));
+                }
+            }
+        }
+
+        if let Some(v) = logger.pii_logging_enabled {
+            js.set_pii_logging_enabled(v);
+        }
+        if let Some(v) = logger.log_level {
+            js.set_log_level(v.as_str());
+        }
+
+        js
+    }
+}
+
+impl From<msal::LoggerOptions> for LoggerOptions {
+    fn from(js: msal::LoggerOptions) -> Self {
+        Self {
+            logger_callback: js.logger_callback().map(LoggerCallback::Js),
+            pii_logging_enabled: js.pii_logging_enabled(),
+            log_level: js.log_level().try_into().ok(),
+        }
+    }
 }
 
 // TODO: Work out how to pass functions in and out: add logger options
@@ -229,8 +358,8 @@ pub struct LoggerOptions<'a> {
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
 #[derive(Default)]
 pub struct BrowserSystemOptions {
-    // token_renewal_offset_seconds: Option<u32>,
-    // logger_options: Option<LoggerOptions<'a>>,
+    token_renewal_offset_seconds: Option<u32>,
+    logger_options: Option<LoggerOptions>,
     window_hash_timeout: Option<u32>,
     iframe_hash_timeout: Option<u32>,
     load_frame_timeout: Option<u32>,
@@ -240,12 +369,37 @@ impl BrowserSystemOptions {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn set_logger_options(mut self, logger_options: LoggerOptions) -> Self {
+        self.logger_options = Some(logger_options);
+        self
+    }
+    pub fn set_token_renewal_offset_seconds(mut self, token_renewal_offset_seconds: u32) -> Self {
+        self.token_renewal_offset_seconds = Some(token_renewal_offset_seconds);
+        self
+    }
+
+    pub fn set_window_hash_timeout(mut self, window_hash_timeout: u32) -> Self {
+        self.window_hash_timeout = Some(window_hash_timeout);
+        self
+    }
+
+    pub fn set_iframe_hash_timeout(mut self, iframe_hash_timeout: u32) -> Self {
+        self.iframe_hash_timeout = Some(iframe_hash_timeout);
+        self
+    }
+
+    pub fn set_load_frame_timeout(mut self, load_frame_timeout: u32) -> Self {
+        self.load_frame_timeout = Some(load_frame_timeout);
+        self
+    }
 }
 
 impl From<msal::BrowserSystemOptions> for BrowserSystemOptions {
     fn from(system: msal::BrowserSystemOptions) -> Self {
         Self {
-            // logger_options: (),
+            logger_options: system.logger_options().map(Into::into),
+            token_renewal_offset_seconds: system.token_renewal_offset_seconds(),
             window_hash_timeout: system.window_hash_timeout(),
             iframe_hash_timeout: system.iframe_hash_timeout(),
             load_frame_timeout: system.load_frame_timeout(),
@@ -256,6 +410,12 @@ impl From<msal::BrowserSystemOptions> for BrowserSystemOptions {
 impl From<BrowserSystemOptions> for msal::BrowserSystemOptions {
     fn from(system: BrowserSystemOptions) -> Self {
         let js_system = msal::BrowserSystemOptions::new();
+        if let Some(v) = system.logger_options {
+            js_system.set_logger_options(v.into())
+        }
+        if let Some(v) = system.token_renewal_offset_seconds {
+            js_system.set_token_renewal_offset_seconds(v)
+        }
         if let Some(v) = system.window_hash_timeout {
             js_system.set_window_hash_timeout(v)
         }
@@ -276,23 +436,32 @@ pub struct Configuration<'a> {
 }
 
 impl<'a> Configuration<'a> {
-    pub fn new(
-        auth: BrowserAuthOptions<'a>,
-        cache: Option<CacheOptions>,
-        system: Option<BrowserSystemOptions>,
-    ) -> Self {
+    pub fn new(auth: BrowserAuthOptions<'a>) -> Self {
         Self {
             auth,
-            cache,
-            system,
+            cache: None,
+            system: None,
         }
     }
-    
+
+    pub fn set_cache(mut self, cache: CacheOptions) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
+    pub fn set_system(mut self, system: BrowserSystemOptions) -> Self {
+        self.system = Some(system);
+        self
+    }
+
     // TODO: This will panic, rather than error! So I changed from TryFrom
     // Tried using `panic::catch_unwind` but doesn't catch it?
     /// This can cause a runtime exception
     pub fn unchecked_from(js_obj: &Object) -> Self {
-        js_obj.clone().unchecked_into::<msal::Configuration>().into()
+        js_obj
+            .clone()
+            .unchecked_into::<msal::Configuration>()
+            .into()
     }
 }
 
@@ -325,7 +494,6 @@ impl<'a> From<msal::Configuration> for Configuration<'a> {
 // https://tools.ietf.org/html/rfc7519#section-4.1
 // https://tools.ietf.org/html/rfc7515
 // https://www.iana.org/assignments/jwt/jwt.xhtml#claims
-// TODO: get all the azure claims / put in own enum?
 /// Covers all the claims as per the  IETF spec. If the claim doesn't match any of the standard ones
 /// it will return `Custom::(claim_name, claim_value)`
 /// Adds the azure specific ones too
@@ -409,42 +577,42 @@ pub enum TokenClaim {
     custom(String, JsValue),
 }
 
-impl From<JsValue> for TokenClaim {
-    fn from(js_value: JsValue) -> Self {
+impl TryFrom<JsValue> for TokenClaim {
+    type Error = (String, JsValue);
+
+    fn try_from(js_value: JsValue) -> Result<Self, Self::Error> {
         let kv = js_value.unchecked_into::<Array>();
         let value = kv.get(1);
         let key: String = kv.get(0).as_string().unwrap();
-        //TODO: Would like to close over key and value, but can't since the closure takes ownership
-        //TODO: Rather than returning a custom claim, should these return nothing since the type is known?
         let make_string = |f: &dyn Fn(String) -> Self, key, value: JsValue| match value.as_string()
         {
-            None => Self::custom(key, value),
-            Some(value) => f(value),
+            Some(value) => Ok(f(value)),
+            None => Err((key, value)),
         };
         let make_f64 = |f: &dyn Fn(f64) -> Self, key, value: JsValue| match value.as_f64() {
-            None => Self::custom(key, value),
-            Some(value) => f(value.to_owned()),
+            Some(value) => Ok(f(value.to_owned())),
+            None => Err((key, value)),
         };
         let make_bool = |f: &dyn Fn(bool) -> Self, key, value: JsValue| match value.as_bool() {
-            None => Self::custom(key, value),
-            Some(value) => f(value),
+            Some(value) => Ok(f(value)),
+            None => Err((key, value)),
         };
         let make_array = |f: &dyn Fn(Array) -> Self, key, value: JsValue| match value.dyn_into() {
-            Err(value) => Self::custom(key, value),
-            Ok(value) => f(value),
+            Ok(value) => Ok(f(value)),
+            Err(value) => Err((key, value)),
         };
         let make_object = |f: &dyn Fn(Object) -> Self, key, value: JsValue| {
             if value.is_object() {
-                f(value.unchecked_into())
+                Ok(f(value.unchecked_into()))
             } else {
-                Self::custom(key, value)
+                Err((key, value))
             }
         };
 
         // Returned keys are always strings
         // TODO: Could a macro be used here?
         match key.as_str() {
-            "typ" => Self::typ, // Always JWT
+            "typ" => Ok(Self::typ), // Always JWT
             "nonce" => make_string(&Self::nonce, key, value),
             "alg" => make_string(&Self::alg, key, value),
             "kid" => make_string(&Self::kid, key, value),
@@ -517,7 +685,7 @@ impl From<JsValue> for TokenClaim {
             "wids" => make_array(&Self::wids, key, value),
             "groups" => make_array(&Self::groups, key, value),
             "hasgroups" => make_bool(&Self::hasgroups, key, value),
-            _ => Self::custom(key, value),
+            _ => Ok(Self::custom(key, value)),
         }
     }
 }
@@ -528,7 +696,12 @@ pub struct TokenClaims(pub Vec<TokenClaim>);
 impl From<Object> for TokenClaims {
     fn from(js_obj: Object) -> Self {
         let mut claims = Vec::new();
-        js_sys::Object::entries(&js_obj).for_each(&mut |v, _, _| claims.push(v.into()));
+        js_sys::Object::entries(&js_obj).for_each(&mut |v, _, _| {
+            // If the expected type doesn't match do not return the claim
+            if let Ok(v) = v.try_into() {
+                claims.push(v)
+            };
+        });
         Self(claims)
     }
 }
@@ -704,7 +877,7 @@ impl AccountInfo {
     pub fn username(&self) -> &str {
         &self.username
     }
-    
+
     fn from_array(array: Array) -> Vec<Self> {
         array
             .iter()
@@ -752,6 +925,7 @@ mod tests {
     use js_sys::Object;
     use wasm_bindgen::prelude::*;
     use wasm_bindgen_test::*;
+    use web_sys::console;
 
     pub const CLIENT_ID: &str = "MY_CLIENT_ID";
     pub const REDIRECT_URI: &str = "MY_REDIRECT_URI";
@@ -763,6 +937,10 @@ mod tests {
     pub const AUTHORITY: &str = "authority";
     pub const CORRELATION_ID: &str = "correlation_id";
     pub const POST_LOGOUT_URI: &str = "POST_LOGOUT_URI";
+    pub const CLOUD_DISCOVERY_METADATA: &str = "CLOUD_DISCOVERY_METADATA";
+    pub const KNOWN_AUTHORITIES: [&str; 1] = ["KNOWN_AUTHORITIES"];
+    pub const NAVIGATE_TO_LOGIN_REQUEST_URL: bool = true;
+    pub const POST_LOGOUT_REDIRECT_URI: &str = "POST_LOGOUT_REDIRECT_URI";
 
     #[wasm_bindgen(module = "/msal-object-examples.js")]
     extern "C" {
@@ -770,7 +948,10 @@ mod tests {
         static auth: Object;
         static cache: Object;
         static system: Object;
-        static config: Object;
+        static msalConfig: Object;
+        static accessToken: Object;
+        static idToken: Object;
+        static completeToken: Object;
     }
 
     fn home_account_id<'a>(i: usize) -> Cow<'a, str> {
@@ -822,6 +1003,8 @@ mod tests {
         assert_eq!(js_ac.environment(), account().environment);
         assert_eq!(js_ac.tenant_id(), account().tenant_id);
         assert_eq!(js_ac.username(), account().username);
+
+        js_cast_checker::<msal::AccountInfo>(js_ac.into());
     }
 
     #[wasm_bindgen_test]
@@ -843,7 +1026,7 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn parse_authentication_result() {
+    fn parse_js_authentication_result() {
         let _: AuthenticationResult = authResponse
             .clone()
             .unchecked_into::<msal::AuthenticationResult>()
@@ -851,7 +1034,7 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn parse_browser_auth_options() {
+    fn parse_js_browser_auth_options() {
         let _: BrowserAuthOptions = auth
             .clone()
             .unchecked_into::<msal::BrowserAuthOptions>()
@@ -860,13 +1043,13 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn parse_cache_options() {
+    fn parse_js_cache_options() {
         let _: CacheOptions = cache.clone().unchecked_into::<msal::CacheOptions>().into();
         // TODO: Check the values
     }
 
     #[wasm_bindgen_test]
-    fn parse_system() {
+    fn parse_js_system() {
         let _: BrowserSystemOptions = cache
             .clone()
             .unchecked_into::<msal::BrowserSystemOptions>()
@@ -875,9 +1058,98 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn configuration<'a>() {
-        let _: Configuration = Configuration::unchecked_from(&config);
+    fn parse_js_configuration() {
+        let config: Configuration = Configuration::unchecked_from(&msalConfig);
+        let js_config: msal::Configuration = config.into();
+        console::log_1(&"JS Configuration:".into());
+        console::log_1(&js_config.clone().into());
+
+        js_cast_checker::<msal::Configuration>(js_config.into());
     }
 
+    #[wasm_bindgen_test]
+    fn build_browser_auth_options() {
+        let b_auth = BrowserAuthOptions::new(CLIENT_ID)
+            .set_authority(AUTHORITY)
+            .set_cloud_discovery_metadata(CLOUD_DISCOVERY_METADATA)
+            .set_known_authorities(&KNOWN_AUTHORITIES[..])
+            .set_navigate_to_login_request_url(NAVIGATE_TO_LOGIN_REQUEST_URL)
+            .set_post_logout_redirect_uri(POST_LOGOUT_REDIRECT_URI)
+            .set_redirect_uri(REDIRECT_URI);
+
+        let b_cache = CacheOptions::new()
+            .set_cache_location(CacheLocation::Session)
+            .set_store_auth_state_in_cookie(true);
+
+        fn logger_callback(_: LogLevel, _: String, _: bool) {};
+
+        let logger_options = LoggerOptions::new()
+            .set_log_level(LogLevel::Info)
+            .set_pii_logging_enabled(true)
+            .set_logger_callback(&logger_callback);
+
+        let b_system = BrowserSystemOptions::new()
+            .set_token_renewal_offset_seconds(66)
+            .set_iframe_hash_timeout(66)
+            .set_load_frame_timeout(66)
+            .set_window_hash_timeout(66)
+            .set_logger_options(logger_options);
+
+        let config = Configuration::new(b_auth)
+            .set_cache(b_cache)
+            .set_system(b_system);
+
+        let js_config: msal::Configuration = config.into();
+
+        console::log_1(&"WASM Configuration:".into());
+        console::log_1(&js_config.clone().into());
+
+        js_cast_checker::<msal::Configuration>(js_config.into());
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_access_token() {
+        let _: TokenClaims = accessToken.clone().into();
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_id_token() {
+        let _: TokenClaims = idToken.clone().into();
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_claims() {
+        let id_claims: TokenClaims = idToken.clone().into();
+        let access_claims: TokenClaims = accessToken.clone().into();
+        let claim = id_claims
+            .0
+            .iter()
+            .find_map(|v| {
+                if let TokenClaim::alg(c) = v {
+                    Some(c)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(claim, "RS256");
+
+        let no_custom = |claims: TokenClaims| {
+            claims.0.into_iter().find_map(|v| {
+                if let TokenClaim::custom(c, v) = v {
+                    Some((c, v))
+                } else {
+                    None
+                }
+            })
+        };
+
+        let all: TokenClaims = completeToken.clone().into();
+
+        // Check have found all azure claims, the source may not have them all though!
+        assert!(no_custom(id_claims).is_none());
+        assert!(no_custom(access_claims).is_none());
+        assert!(no_custom(all).is_none());
+    }
     // TODO: Add a suite of integration tests to ensure the API is stable?
 }

@@ -1,6 +1,6 @@
 [package]
 name = "msal_browser"
-version = "0.1.8"
+version = "0.2.0"
 authors = ["Paul Dorehill"]
 edition = "2018"
 description = "Rust WASM wrapper for msal-browser.js"

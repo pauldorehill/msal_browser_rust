@@ -45,7 +45,7 @@ impl<'a, T> IterBaseAuthRequest<'a, T> {
     }
 }
 
-pub trait SetBaseAuthrequest<'a> {
+pub trait SetBaseAuthRequest<'a> {
     fn base_request(&mut self) -> &mut BaseAuthRequest<'a>;
 
     fn set_authority<T>(mut self, authority: T) -> Self
@@ -73,7 +73,7 @@ impl<'a> BaseAuthRequest<'a> {
         T: Clone + Into<Cow<'a, str>>,
     {
         Self {
-            scopes: scopes.into_iter().cloned().map(Into::into).collect(),
+            scopes: scopes.iter().cloned().map(Into::into).collect(),
             authority: None,
             correlation_id: None,
         }
@@ -324,7 +324,7 @@ impl<'a> SetAuthorizationUrlRequest<'a> for AuthorizationUrlRequest<'a> {
     }
 }
 
-impl<'a> SetBaseAuthrequest<'a> for AuthorizationUrlRequest<'a> {
+impl<'a> SetBaseAuthRequest<'a> for AuthorizationUrlRequest<'a> {
     fn base_request(&mut self) -> &mut BaseAuthRequest<'a> {
         &mut self.base_request
     }
@@ -388,7 +388,7 @@ impl<'a> RedirectRequest<'a> {
 }
 
 #[cfg(feature = "redirect")]
-impl<'a> SetBaseAuthrequest<'a> for RedirectRequest<'a> {
+impl<'a> SetBaseAuthRequest<'a> for RedirectRequest<'a> {
     fn base_request(&mut self) -> &mut BaseAuthRequest<'a> {
         &mut self.auth_url_req.base_request
     }
@@ -451,7 +451,7 @@ pub struct SilentRequest<'a> {
     redirect_uri: Option<Cow<'a, str>>,
 }
 
-impl<'a> SetBaseAuthrequest<'a> for SilentRequest<'a> {
+impl<'a> SetBaseAuthRequest<'a> for SilentRequest<'a> {
     fn base_request(&mut self) -> &mut BaseAuthRequest<'a> {
         &mut self.base_request
     }
@@ -578,19 +578,32 @@ mod test_request {
     use super::*;
     use crate::tests::*;
     use wasm_bindgen_test::*;
+    use web_sys::console;
 
     const FORCE_REFRESH: bool = true;
     const REDIRECT_URI: &str = "redirect_uri";
 
     #[wasm_bindgen_test]
     fn mirror_auth_url_request() {
-        let _req = AuthorizationUrlRequest::new(&[SCOPE][..]);
+        let req = AuthorizationUrlRequest::new(&[SCOPE][..]);
+        let js_req: msal::AuthorizationUrlRequest = (&req).into();
+
+        console::log_1(&"AuthorizationUrlRequest:".into());
+        console::log_1(&js_req);
         // TODO: Write tests
+        js_cast_checker::<msal::AuthorizationUrlRequest>(js_req.into());
     }
 
     #[wasm_bindgen_test]
+    #[cfg(feature = "redirect")]
     fn mirror_redirect_request() {
+        let req = RedirectRequest::new(&[SCOPE][..]);
+        let js_req: msal::RedirectRequest = (&req).into();
+
+        console::log_1(&"RedirectRequest:".into());
+        console::log_1(&js_req);
         // TODO: Write tests
+        js_cast_checker::<msal::RedirectRequest>(js_req.into());
     }
 
     #[wasm_bindgen_test]
@@ -604,6 +617,9 @@ mod test_request {
 
         let js_req: msal::SilentRequest = (&req).into();
 
+        console::log_1(&"SilentRequest:".into());
+        console::log_1(&js_req);
+        
         assert_eq!(
             req.base_request.scopes,
             JsArrayString::from(js_req.scopes()).0
@@ -639,6 +655,10 @@ mod test_request {
             .set_post_logout_redirect_uri(POST_LOGOUT_URI);
 
         let js_req: msal::EndSessionRequest = req.clone().into();
+        
+        console::log_1(&"EndSessionRequest:".into());
+        console::log_1(&js_req);
+
         assert_eq!(
             req.correlation_id.map(Cow::into_owned),
             js_req.correlation_id()

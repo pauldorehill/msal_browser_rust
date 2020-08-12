@@ -112,7 +112,7 @@ mod tests {
         let b = BrowserAuthOptions::new(tests::CLIENT_ID)
             .set_authority(AUTHORITY)
             .set_redirect_uri(REDIRECT_URI);
-        let config = Configuration::new(b, None, None);
+        let config = Configuration::new(b);
         let client_app = RedirectApp::new(config, |_| ());
         client_app.login_redirect();
     }
