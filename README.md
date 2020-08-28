@@ -16,10 +16,9 @@ There are a huge amount of [`Configuration`](https://github.com/AzureAD/microsof
 
 To use:
 
-
 ```rust
-const CLIENT_ID: &str = "YOUR_CLIENT_ID";
-const AUTHORITY: &str = "YOUR_AUTHORITY";
+const CLIENT_ID: &str = "CLIENT_ID";
+const AUTHORITY: &str = "AUTHORITY";
 
 // Setup App
 let auth_options = BrowserAuthOptions::new(CLIENT_ID).set_authority(AUTHORITY);
@@ -31,13 +30,17 @@ let scopes = ["User.Read"];
 
 // Login
 let auth_res = client_app.login_popup().await.unwrap();
+let auth_res = client_app.login_popup_with_scopes(&scopes).await.unwrap();
 
-// Get account
-let account = &client_app.get_all_accounts().unwrap()[0];
+// Account Info
+let account = client_app.get_account_by_username("username").unwrap();
+let account = client_app.get_account_by_home_id("home_id").unwrap();
+let accounts = &client_app.get_all_accounts();
 
-// Setup some requests
+// Requests
 let auth_request = AuthorizationUrlRequest::new(&scopes[..]).set_login_hint(account.username());
-let silent_request = SilentRequest::new(&scopes[..], account);
+let silent_request = SilentRequest::new(&scopes[..], &account);
+let end_session_request = EndSessionRequest::new();
 
 // SSO sign in
 let sso_auth_result = client_app.sso_silent(&auth_request).await.unwrap();
@@ -54,6 +57,8 @@ let silent_token = client_app
 // Logout
 client_app.logout(None);
 ```
+### Example
+There is an example app that uses the fantastic [dominator](https://github.com/Pauan/rust-dominator) dom library.
 
 Approx file sizes in kb:
 

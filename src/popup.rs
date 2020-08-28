@@ -10,6 +10,14 @@ pub struct PopupApp {
     auth: msal::PublicClientApplication,
 }
 
+impl Clone for PopupApp {
+    fn clone(&self) -> Self {
+        Self {
+            auth: self.auth.clone().into()
+        }
+    }
+}
+
 impl Msal for PopupApp {
     fn auth(&self) -> &msal::PublicClientApplication {
         &self.auth
@@ -71,6 +79,7 @@ mod tests {
 
     use super::*;
     use crate::{tests::*, BrowserAuthOptions};
+    // use web_sys::console;
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
@@ -96,5 +105,16 @@ mod tests {
         let c = Configuration::new(b);
         let client_app = PopupApp::new(c);
         client_app.login_popup();
+    }
+
+    #[wasm_bindgen_test]
+    fn can_clone() {
+        let b = BrowserAuthOptions::new(tests::CLIENT_ID)
+            .set_authority(AUTHORITY)
+            .set_redirect_uri(REDIRECT_URI);
+        let c = Configuration::new(b);
+        let client_app = PopupApp::new(c);
+        let client_app2 = client_app.clone();
+        assert_eq!(JsValue::from(client_app.auth), JsValue::from(client_app2.auth))
     }
 }

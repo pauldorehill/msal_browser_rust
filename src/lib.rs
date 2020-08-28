@@ -279,6 +279,7 @@ impl TryFrom<JsValue> for LogLevel {
 }
 
 // This is to allow loading from Js: might as well leave there
+// Use of trait object reference works best as an api since no need to specify generic type
 enum LoggerCallback {
     Js(Function),
     WASM(&'static dyn Fn(LogLevel, String, bool)),
@@ -818,7 +819,13 @@ pub trait PublicClientApplication: msal::Msal {
 
     fn get_account_by_username(&self, username: &str) -> Option<AccountInfo> {
         self.auth()
-            .get_account_by_username(username.to_string())
+            .get_account_by_username(username.into())
+            .map(Into::into)
+    }
+
+    fn get_account_by_home_id(&self, home_id: &str) -> Option<AccountInfo> {
+        self.auth()
+            .get_account_by_home_id(home_id.into())
             .map(Into::into)
     }
 
@@ -831,8 +838,8 @@ pub trait PublicClientApplication: msal::Msal {
 // https://rust-lang.github.io/async-book/07_workarounds/06_async_in_traits.html
 // https://github.com/dtolnay/async-trait
 
-// Silent login https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/login-user.md#silent-login-with-ssosilent
-// needs a login_hint, sid or account object on the request
+/// Silent login https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/login-user.md#silent-login-with-ssosilent
+/// needs a login_hint, sid or account object on the request
 async fn sso_silent<'a>(
     client_app: &msal::PublicClientApplication,
     request: &'a AuthorizationUrlRequest<'a>,

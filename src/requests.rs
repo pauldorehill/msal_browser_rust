@@ -136,6 +136,29 @@ impl<'a> AuthorizationUrlRequest<'a> {
             nonce: None,
         }
     }
+
+    pub fn empty() -> Self {
+        let base_request = BaseAuthRequest {
+            scopes: Vec::new(),
+            authority: None,
+            correlation_id: None,
+        };
+        Self {
+            base_request,
+            redirect_uri: None,
+            extra_scopes_to_consent: None,
+            response_mode: None,
+            code_challenge: None,
+            code_challenge_method: None,
+            state: None,
+            prompt: None,
+            login_hint: None,
+            domain_hint: None,
+            extra_query_parameters: None,
+            claims: None,
+            nonce: None,
+        }
+    }
 }
 
 struct IterAuthorizationUrlRequest<'a, T> {
@@ -619,7 +642,7 @@ mod test_request {
 
         console::log_1(&"SilentRequest:".into());
         console::log_1(&js_req);
-        
+
         assert_eq!(
             req.base_request.scopes,
             JsArrayString::from(js_req.scopes()).0
@@ -655,7 +678,7 @@ mod test_request {
             .set_post_logout_redirect_uri(POST_LOGOUT_URI);
 
         let js_req: msal::EndSessionRequest = req.clone().into();
-        
+
         console::log_1(&"EndSessionRequest:".into());
         console::log_1(&js_req);
 

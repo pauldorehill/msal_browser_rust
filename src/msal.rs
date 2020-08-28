@@ -6,8 +6,8 @@
 //! Since the wasm object are pointers these methods fail.
 //! These are the exports:
 //! ```js
-//! export { AuthError, AuthErrorMessage, AuthenticationResult, BrowserAuthError, BrowserAuthErrorMessage, 
-//! BrowserConfigurationAuthError, BrowserConfigurationAuthErrorMessage, InteractionRequiredAuthError, 
+//! export { AuthError, AuthErrorMessage, AuthenticationResult, BrowserAuthError, BrowserAuthErrorMessage,
+//! BrowserConfigurationAuthError, BrowserConfigurationAuthErrorMessage, InteractionRequiredAuthError,
 //! LogLevel, Logger, PublicClientApplication };
 //! ```
 
@@ -92,10 +92,10 @@ extern "C" {
 
     #[wasm_bindgen(constructor)]
     pub fn new() -> BrowserSystemOptions;
-    
+
     #[wasm_bindgen(method, setter = loggerOptions)]
     pub fn set_logger_options(this: &BrowserSystemOptions, logger_options: LoggerOptions);
-    
+
     #[wasm_bindgen(method, getter = loggerOptions)]
     pub fn logger_options(this: &BrowserSystemOptions) -> Option<LoggerOptions>;
 
@@ -533,6 +533,12 @@ extern "C" {
 
     #[wasm_bindgen(method, js_name = getAccountByUsername)]
     pub fn get_account_by_username(
+        this: &PublicClientApplication,
+        username: String,
+    ) -> Option<AccountInfo>;
+
+    #[wasm_bindgen(method, js_name = getAccountByHomeId)]
+    pub fn get_account_by_home_id(
         this: &PublicClientApplication,
         username: String,
     ) -> Option<AccountInfo>;

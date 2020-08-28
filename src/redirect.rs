@@ -4,13 +4,12 @@ use crate::{
     requests::{AuthorizationUrlRequest, RedirectRequest, SilentRequest},
     sso_silent, AuthenticationResult, Configuration, PublicClientApplication,
 };
-use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 
 // TODO: Should i remove the on error since is only ever msal-browser error
 pub struct RedirectApp<FSuccess>
 where
-    FSuccess: Fn(AuthenticationResult),
+    FSuccess: Fn(AuthenticationResult) + Clone,
     // FErr: Fn(JsValue),
 {
     auth: msal::PublicClientApplication,
@@ -18,9 +17,21 @@ where
     // on_redirect_error: Option<FErr>,
 }
 
+impl<FSuccess> Clone for RedirectApp<FSuccess>
+where
+    FSuccess: Fn(AuthenticationResult) + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            auth: self.auth.clone().into(),
+            on_redirect_success: self.on_redirect_success.clone(),
+        }
+    }
+}
+
 impl<FSuccess> Msal for RedirectApp<FSuccess>
 where
-    FSuccess: Fn(AuthenticationResult),
+    FSuccess: Fn(AuthenticationResult) + Clone,
 {
     fn auth(&self) -> &msal::PublicClientApplication {
         &self.auth
@@ -28,13 +39,13 @@ where
 }
 
 impl<FSuccess> PublicClientApplication for RedirectApp<FSuccess> where
-    FSuccess: Fn(AuthenticationResult) // FErr: Fn(JsValue),
+    FSuccess: Fn(AuthenticationResult) + Clone // FErr: Fn(JsValue),
 {
 }
 
 impl<FSuccess> RedirectApp<FSuccess>
 where
-    FSuccess: Fn(AuthenticationResult),
+    FSuccess: Fn(AuthenticationResult) + Clone,
     // FErr: Fn(JsValue),
 {
     pub fn new(
