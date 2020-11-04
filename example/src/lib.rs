@@ -24,7 +24,8 @@ impl Auth {
         let authority = credentials[1];
 
         let auth_options = BrowserAuthOptions::new(client_id).set_authority(authority);
-        let config = Configuration::new(auth_options);
+        let config = Configuration::new(auth_options)
+            .set_cache(CacheOptions::new().set_cache_location(CacheLocation::Local));
         let auth = PopupApp::new(config);
 
         match auth.get_all_accounts() {
@@ -32,9 +33,9 @@ impl Auth {
                 popup_app: auth,
                 user: Mutable::new(None),
             },
-            Some(accounts) if accounts.len() == 1 => Self {
+            Some(mut accounts) if accounts.len() == 1 => Self {
                 popup_app: auth,
-                user: Mutable::new(Some(accounts[0].clone())),
+                user: Mutable::new(Some(accounts.swap_remove(0))),
             },
             // TODO: Handle multiple accounts
             Some(_accounts) => Self {
@@ -145,6 +146,51 @@ async fn popup_example() {
 
     // Popup token
     let token = client_app.acquire_token_popup(&auth_request).await.unwrap();
+
+    // Silent token
+    let silent_token = client_app
+        .acquire_token_silent(&silent_request)
+        .await
+        .unwrap();
+
+    // Logout
+    client_app.logout(None);
+}
+
+/// Example Api
+#[allow(unused_variables)]
+#[allow(dead_code)]
+async fn redirect_example() {
+    use msal_browser::redirect::RedirectApp;
+
+    // Setup App
+    let auth_options = BrowserAuthOptions::new(CLIENT_ID).set_authority(AUTHORITY);
+    let config = Configuration::new(auth_options);
+    let client_app = RedirectApp::new(config, |_| ());
+
+    // Define some scopes
+    let scopes = ["User.Read"];
+
+    // Login
+    let auth_res = client_app.login_redirect().await;
+    let auth_res = client_app.login_redirect_with_scopes(&scopes).await;
+
+    // Account Info
+    let account = client_app.get_account_by_username("username").unwrap();
+    let account = client_app.get_account_by_home_id("home_id").unwrap();
+    let accounts = &client_app.get_all_accounts();
+
+    // Requests
+    let auth_request = AuthorizationUrlRequest::new(&scopes[..]).set_login_hint(account.username());
+    let silent_request = SilentRequest::new(&scopes[..], &account);
+    let end_session_request = EndSessionRequest::new();
+    let redirect_request = RedirectRequest::new(&scopes);
+
+    // SSO sign in
+    let sso_auth_result = client_app.sso_silent(&auth_request).await.unwrap();
+
+    // Redirect token
+    let token = client_app.acquire_token_redirect(&redirect_request).await;
 
     // Silent token
     let silent_token = client_app

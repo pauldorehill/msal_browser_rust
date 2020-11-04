@@ -13,7 +13,7 @@ pub struct PopupApp {
 impl Clone for PopupApp {
     fn clone(&self) -> Self {
         Self {
-            auth: self.auth.clone().into()
+            auth: self.auth.clone().into(),
         }
     }
 }
@@ -38,9 +38,9 @@ impl PopupApp {
         self.login_popup_with_scopes(&scopes).await
     }
 
-    pub async fn login_popup_with_scopes<'a, T>(
+    pub async fn login_popup_with_scopes<T>(
         &self,
-        scopes: &'a [T],
+        scopes: &[T],
     ) -> Result<AuthenticationResult, JsValue>
     where
         T: Into<String> + Clone,
@@ -115,6 +115,9 @@ mod tests {
         let c = Configuration::new(b);
         let client_app = PopupApp::new(c);
         let client_app2 = client_app.clone();
-        assert_eq!(JsValue::from(client_app.auth), JsValue::from(client_app2.auth))
+        assert_eq!(
+            JsValue::from(client_app.auth),
+            JsValue::from(client_app2.auth)
+        )
     }
 }

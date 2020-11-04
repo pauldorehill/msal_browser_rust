@@ -60,13 +60,13 @@ where
             // on_redirect_error,
         }
     }
-
+    // TODO: Should these be kept as async?
     pub async fn login_redirect(&self) {
         let empty: [&str; 0] = [];
         self.login_redirect_with_scopes(&empty).await
     }
 
-    pub async fn login_redirect_with_scopes<'a, T>(&self, scopes: &'a [T])
+    pub async fn login_redirect_with_scopes<T>(&self, scopes: &[T])
     where
         T: Into<String> + Clone,
     {

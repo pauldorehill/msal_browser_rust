@@ -568,7 +568,7 @@ extern "C" {
         request: AuthorizationUrlRequest,
     ) -> Result<JsValue, JsValue>;
 
-    //file://./../node_modules/@azure/msal-browser/dist/src/app/PublicClientApplication.d.ts
+    //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
     // This is in the index, but only a constructor, so type checking fails
     pub type AuthenticationResult;
 
@@ -613,6 +613,7 @@ extern "C" {
     #[wasm_bindgen(method, getter = familyId)]
     pub fn family_id(this: &AuthenticationResult) -> Option<String>;
 
+    //file://./../node_modules/@azure/msal-common/dist/src/logger/Logger.d.ts
     pub type LogLevel;
 }
 

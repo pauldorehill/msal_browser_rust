@@ -1,21 +1,22 @@
 //! msal-browser.js in Rust WASM
-mod msal;
 
 // TODO: Many uses of unchecked_into... might be better to do something else:
 // Maybe consider https://docs.rs/js-sys/0.3.44/js_sys/Reflect/index.html
 // https://rustwasm.github.io/docs/wasm-bindgen/reference/working-with-duck-typed-interfaces.html
-
+mod msal;
 #[cfg(feature = "popup")]
 pub mod popup;
 #[cfg(feature = "redirect")]
 pub mod redirect;
 pub mod requests;
+mod token_claims;
 
 use js_sys::{Array, Date, Function, Object};
 use msal::JsArrayString;
 use requests::*;
 use std::borrow::{Borrow, Cow};
 use std::convert::{TryFrom, TryInto};
+use token_claims::TokenClaim;
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 
 pub struct BrowserAuthOptions<'a> {
@@ -354,7 +355,6 @@ impl From<msal::LoggerOptions> for LoggerOptions {
     }
 }
 
-// TODO: Work out how to pass functions in and out: add logger options
 // TODO: is u32 correct for these?
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
 #[derive(Default)]
@@ -489,208 +489,6 @@ impl<'a> From<msal::Configuration> for Configuration<'a> {
     }
 }
 
-// https://docs.microsoft.com/en-us/azure/active-directory/develop/access-tokens
-// https://docs.microsoft.com/en-us/azure/active-directory/develop/id-tokens
-// https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-optional-claims#configuring-directory-extension-optional-claims
-// https://tools.ietf.org/html/rfc7519#section-4.1
-// https://tools.ietf.org/html/rfc7515
-// https://www.iana.org/assignments/jwt/jwt.xhtml#claims
-/// Covers all the claims as per the  IETF spec. If the claim doesn't match any of the standard ones
-/// it will return `Custom::(claim_name, claim_value)`
-/// Adds the azure specific ones too
-#[derive(Clone, PartialEq)]
-#[allow(non_camel_case_types)]
-pub enum TokenClaim {
-    typ, // Always JWT
-    nonce(String),
-    alg(String),
-    kid(String),
-    x5t(String),
-    iss(String),
-    sub(String),
-    aud(String),
-    exp(f64),
-    nbf(f64),
-    iat(f64),
-    jti(String),
-    name(String),
-    given_name(String),
-    family_name(String),
-    middle_name(String),
-    nickname(String),
-    preferred_username(String),
-    profile(String),
-    picture(String),
-    website(String),
-    email(String),
-    email_verified(bool),
-    gender(String),
-    birthdate(String),
-    zoneinfo(String),
-    locale(String),
-    phone_number(String),
-    phone_number_verified(bool),
-    address(Object),
-    updated_at(f64),
-    cnf(Object),
-    sip_from_tag(String),
-    sip_date(f64),
-    sip_callid(String),
-    sip_cseq_num(String),
-    sip_via_branch(String),
-    orig(Object),
-    dest(Object),
-    mky(Object),
-    events(Object),
-    toe(f64),
-    txn(String),
-    rph(Object),
-    sid(String),
-    vot(String),
-    vtm(String),
-    attest(String),
-    origid(String),
-    act(Object),
-    scope(String),
-    client_id(String),
-    may_act(Object),
-    jcard(Object),
-    at_use_nbr(f64), // Technically u32?
-    div(Object),
-    opt(String),
-    // Azure custom
-    idp(String),
-    ver(String),
-    oid(String),
-    tid(String),
-    aio(String),
-    azp(String),
-    azpacr(String),
-    rh(String),
-    scp(String),
-    uti(String),
-    appid(String),
-    roles(Array),
-    wids(Array),
-    // TODO: groups:src1 // _claim_sources?
-    groups(Array),
-    hasgroups(bool),
-    custom(String, JsValue),
-}
-
-impl TryFrom<JsValue> for TokenClaim {
-    type Error = (String, JsValue);
-
-    fn try_from(js_value: JsValue) -> Result<Self, Self::Error> {
-        let kv = js_value.unchecked_into::<Array>();
-        let value = kv.get(1);
-        let key: String = kv.get(0).as_string().unwrap();
-        let make_string = |f: &dyn Fn(String) -> Self, key, value: JsValue| match value.as_string()
-        {
-            Some(value) => Ok(f(value)),
-            None => Err((key, value)),
-        };
-        let make_f64 = |f: &dyn Fn(f64) -> Self, key, value: JsValue| match value.as_f64() {
-            Some(value) => Ok(f(value.to_owned())),
-            None => Err((key, value)),
-        };
-        let make_bool = |f: &dyn Fn(bool) -> Self, key, value: JsValue| match value.as_bool() {
-            Some(value) => Ok(f(value)),
-            None => Err((key, value)),
-        };
-        let make_array = |f: &dyn Fn(Array) -> Self, key, value: JsValue| match value.dyn_into() {
-            Ok(value) => Ok(f(value)),
-            Err(value) => Err((key, value)),
-        };
-        let make_object = |f: &dyn Fn(Object) -> Self, key, value: JsValue| {
-            if value.is_object() {
-                Ok(f(value.unchecked_into()))
-            } else {
-                Err((key, value))
-            }
-        };
-
-        // Returned keys are always strings
-        // TODO: Could a macro be used here?
-        match key.as_str() {
-            "typ" => Ok(Self::typ), // Always JWT
-            "nonce" => make_string(&Self::nonce, key, value),
-            "alg" => make_string(&Self::alg, key, value),
-            "kid" => make_string(&Self::kid, key, value),
-            "x5t" => make_string(&Self::x5t, key, value),
-            "iss" => make_string(&Self::iss, key, value),
-            "sub" => make_string(&Self::sub, key, value),
-            "aud" => make_string(&Self::aud, key, value),
-            "exp" => make_f64(&Self::exp, key, value),
-            "nbf" => make_f64(&Self::nbf, key, value),
-            "iat" => make_f64(&Self::iat, key, value),
-            "jti" => make_string(&Self::jti, key, value),
-            "name" => make_string(&Self::name, key, value),
-            "given_name" => make_string(&Self::given_name, key, value),
-            "family_name" => make_string(&Self::family_name, key, value),
-            "middle_name" => make_string(&Self::middle_name, key, value),
-            "nickname" => make_string(&Self::nickname, key, value),
-            "preferred_username" => make_string(&Self::preferred_username, key, value),
-            "profile" => make_string(&Self::profile, key, value),
-            "picture" => make_string(&Self::picture, key, value),
-            "website" => make_string(&Self::website, key, value),
-            "email" => make_string(&Self::email, key, value),
-            "email_verified" => make_bool(&Self::email_verified, key, value),
-            "gender" => make_string(&Self::gender, key, value),
-            "birthdate" => make_string(&Self::birthdate, key, value),
-            "zoneinfo" => make_string(&Self::zoneinfo, key, value),
-            "locale" => make_string(&Self::locale, key, value),
-            "phone_number" => make_string(&Self::phone_number, key, value),
-            "phone_number_verified" => make_bool(&Self::phone_number_verified, key, value),
-            "address" => make_object(&Self::address, key, value),
-            "updated_at" => make_f64(&Self::updated_at, key, value),
-            "cnf" => make_object(&Self::cnf, key, value),
-            "sip_from_tag" => make_string(&Self::sip_from_tag, key, value),
-            "sip_date" => make_f64(&Self::sip_date, key, value),
-            "sip_callid" => make_string(&Self::sip_callid, key, value),
-            "sip_cseq_num" => make_string(&Self::sip_cseq_num, key, value),
-            "sip_via_branch" => make_string(&Self::sip_via_branch, key, value),
-            "orig" => make_object(&Self::orig, key, value),
-            "dest" => make_object(&Self::dest, key, value),
-            "mky" => make_object(&Self::mky, key, value),
-            "events" => make_object(&Self::events, key, value),
-            "toe" => make_f64(&Self::toe, key, value),
-            "txn" => make_string(&Self::txn, key, value),
-            "rph" => make_object(&Self::rph, key, value),
-            "sid" => make_string(&Self::sid, key, value),
-            "vot" => make_string(&Self::vot, key, value),
-            "vtm" => make_string(&Self::vtm, key, value),
-            "attest" => make_string(&Self::attest, key, value),
-            "origid" => make_string(&Self::origid, key, value),
-            "act" => make_object(&Self::act, key, value),
-            "scope" => make_string(&Self::scope, key, value),
-            "client_id" => make_string(&Self::client_id, key, value),
-            "may_act" => make_object(&Self::may_act, key, value),
-            "jcard" => make_object(&Self::jcard, key, value),
-            "at_use_nbr" => make_f64(&Self::at_use_nbr, key, value),
-            "div" => make_object(&Self::div, key, value),
-            "opt" => make_string(&Self::opt, key, value),
-            // Azure
-            "idp" => make_string(&Self::idp, key, value),
-            "ver" => make_string(&Self::ver, key, value),
-            "oid" => make_string(&Self::oid, key, value),
-            "tid" => make_string(&Self::tid, key, value),
-            "aio" => make_string(&Self::aio, key, value),
-            "azp" => make_string(&Self::azp, key, value),
-            "azpacr" => make_string(&Self::azpacr, key, value),
-            "rh" => make_string(&Self::rh, key, value),
-            "scp" => make_string(&Self::scp, key, value),
-            "uti" => make_string(&Self::uti, key, value),
-            "appid" => make_string(&Self::appid, key, value),
-            "roles" => make_array(&Self::roles, key, value),
-            "wids" => make_array(&Self::wids, key, value),
-            "groups" => make_array(&Self::groups, key, value),
-            "hasgroups" => make_bool(&Self::hasgroups, key, value),
-            _ => Ok(Self::custom(key, value)),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct TokenClaims(pub Vec<TokenClaim>);
 
@@ -707,6 +505,8 @@ impl From<Object> for TokenClaims {
     }
 }
 
+//TODO: Add an api for this
+impl TokenClaims {}
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
 #[derive(Clone)]
@@ -915,12 +715,13 @@ impl<'a> From<&'a AccountInfo> for msal::AccountInfo {
     }
 }
 
+//TODO: Should I just remove and pub in root?
 pub mod prelude {
     pub use crate::popup::PopupApp;
     pub use crate::requests::*;
     pub use crate::{
-        AccountInfo, AuthenticationResult, BrowserAuthOptions, Configuration,
-        PublicClientApplication,
+        AccountInfo, AuthenticationResult, BrowserAuthOptions, CacheLocation, CacheOptions,
+        Configuration, LogLevel, LoggerOptions, PublicClientApplication,
     };
 }
 
@@ -956,9 +757,6 @@ mod tests {
         static cache: Object;
         static system: Object;
         static msalConfig: Object;
-        static accessToken: Object;
-        static idToken: Object;
-        static completeToken: Object;
     }
 
     fn home_account_id<'a>(i: usize) -> Cow<'a, str> {
@@ -1069,7 +867,7 @@ mod tests {
         let config: Configuration = Configuration::unchecked_from(&msalConfig);
         let js_config: msal::Configuration = config.into();
         console::log_1(&"JS Configuration:".into());
-        console::log_1(&js_config.clone().into());
+        console::log_1(&js_config.clone());
 
         js_cast_checker::<msal::Configuration>(js_config.into());
     }
@@ -1109,54 +907,10 @@ mod tests {
         let js_config: msal::Configuration = config.into();
 
         console::log_1(&"WASM Configuration:".into());
-        console::log_1(&js_config.clone().into());
+        console::log_1(&js_config.clone());
 
         js_cast_checker::<msal::Configuration>(js_config.into());
     }
 
-    #[wasm_bindgen_test]
-    fn parse_access_token() {
-        let _: TokenClaims = accessToken.clone().into();
-    }
-
-    #[wasm_bindgen_test]
-    fn parse_id_token() {
-        let _: TokenClaims = idToken.clone().into();
-    }
-
-    #[wasm_bindgen_test]
-    fn parse_claims() {
-        let id_claims: TokenClaims = idToken.clone().into();
-        let access_claims: TokenClaims = accessToken.clone().into();
-        let claim = id_claims
-            .0
-            .iter()
-            .find_map(|v| {
-                if let TokenClaim::alg(c) = v {
-                    Some(c)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        assert_eq!(claim, "RS256");
-
-        let no_custom = |claims: TokenClaims| {
-            claims.0.into_iter().find_map(|v| {
-                if let TokenClaim::custom(c, v) = v {
-                    Some((c, v))
-                } else {
-                    None
-                }
-            })
-        };
-
-        let all: TokenClaims = completeToken.clone().into();
-
-        // Check have found all azure claims, the source may not have them all though!
-        assert!(no_custom(id_claims).is_none());
-        assert!(no_custom(access_claims).is_none());
-        assert!(no_custom(all).is_none());
-    }
     // TODO: Add a suite of integration tests to ensure the API is stable?
 }
