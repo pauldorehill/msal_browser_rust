@@ -1,6 +1,6 @@
 use js_sys::{Array, Object};
 use paste::paste;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use wasm_bindgen::{JsCast, JsValue};
 
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/access-tokens
@@ -150,10 +150,28 @@ generate_claims! {
      (hasgroups, bool)
 }
 
+#[derive(Clone)]
+pub struct TokenClaims(pub Vec<TokenClaim>);
+
+impl From<Object> for TokenClaims {
+    fn from(js_obj: Object) -> Self {
+        let mut claims = Vec::new();
+        js_sys::Object::entries(&js_obj).for_each(&mut |v, _, _| {
+            // If the expected type doesn't match do not return the claim
+            if let Ok(v) = v.try_into() {
+                claims.push(v)
+            };
+        });
+        Self(claims)
+    }
+}
+
+//TODO: Add an api for this
+impl TokenClaims {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
     use wasm_bindgen::prelude::*;
     use wasm_bindgen_test::wasm_bindgen_test_configure;
     use wasm_bindgen_test::*;

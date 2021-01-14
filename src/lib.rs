@@ -16,7 +16,7 @@ use msal::JsArrayString;
 use requests::*;
 use std::borrow::{Borrow, Cow};
 use std::convert::{TryFrom, TryInto};
-use token_claims::TokenClaim;
+use token_claims::TokenClaims;
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 
 pub struct BrowserAuthOptions<'a> {
@@ -489,24 +489,6 @@ impl<'a> From<msal::Configuration> for Configuration<'a> {
     }
 }
 
-#[derive(Clone)]
-pub struct TokenClaims(pub Vec<TokenClaim>);
-
-impl From<Object> for TokenClaims {
-    fn from(js_obj: Object) -> Self {
-        let mut claims = Vec::new();
-        js_sys::Object::entries(&js_obj).for_each(&mut |v, _, _| {
-            // If the expected type doesn't match do not return the claim
-            if let Ok(v) = v.try_into() {
-                claims.push(v)
-            };
-        });
-        Self(claims)
-    }
-}
-
-//TODO: Add an api for this
-impl TokenClaims {}
 // TODO: Date is a Js type, should I change?
 //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
 #[derive(Clone)]
