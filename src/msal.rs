@@ -11,7 +11,7 @@
 //! LogLevel, Logger, PublicClientApplication };
 //! ```
 
-use js_sys::{Array, Date, JsString, Map, Object, Function};
+use js_sys::{Array, Date, Function, JsString, Map, Object};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -21,9 +21,11 @@ pub trait Msal {
     fn auth(&self) -> &PublicClientApplication;
 }
 
+// TODO: Use a macro rules for the extern binding generation?
+
 #[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
 extern "C" {
-    // file://./../node_modules/@azure/msal-browser/dist/src/config/Configuration.d.ts
+    // file://./../node_modules/@azure/msal-browser/dist/config/Configuration.d.ts
     pub type BrowserAuthOptions;
 
     #[wasm_bindgen(constructor)]
@@ -123,7 +125,7 @@ extern "C" {
     #[wasm_bindgen(method, getter = loadFrameTimeout)]
     pub fn load_frame_timeout(this: &BrowserSystemOptions) -> Option<u32>;
 
-    // file://./../node_modules/@azure/msal-browser/dist/src/config/Configuration.d.ts
+    // file://./../node_modules/@azure/msal-browser/dist/config/Configuration.d.ts
     pub type Configuration;
 
     #[wasm_bindgen(constructor)]
@@ -147,7 +149,7 @@ extern "C" {
     #[wasm_bindgen(method, setter)]
     pub fn set_system(this: &Configuration, system_options: BrowserSystemOptions);
 
-    // file://./..//node_modules/@azure/msal-common/dist/src/request/AuthorizationUrlRequest.d.ts
+    // file://./..//node_modules/@azure/msal-common/dist/request/AuthorizationUrlRequest.d.ts
     // just add the BaseRequest properties for now
     pub type AuthorizationUrlRequest;
 
@@ -256,7 +258,7 @@ extern "C" {
     #[wasm_bindgen(method, setter)]
     pub fn set_nonce(this: &AuthorizationUrlRequest, nonce: &str);
 
-    // file://./..//node_modules/@azure/msal-common/dist/src/account/AccountInfo.d.ts
+    // file://./..//node_modules/@azure/msal-common/dist/account/AccountInfo.d.ts
     pub type AccountInfo;
 
     #[wasm_bindgen(constructor)]
@@ -279,7 +281,7 @@ extern "C" {
     #[wasm_bindgen(method, getter)]
     pub fn username(this: &AccountInfo) -> String;
 
-    // file://./..//node_modules/@azure/msal-common/dist/src/request/EndSessionRequest.d.ts
+    // file://./..//node_modules/@azure/msal-common/dist/request/EndSessionRequest.d.ts
     pub type EndSessionRequest;
 
     #[wasm_bindgen(constructor)]
@@ -313,7 +315,7 @@ extern "C" {
     #[wasm_bindgen(method, setter = correlationId)]
     pub fn set_correlation_id(this: &EndSessionRequest, correlation_id: &str);
 
-    // file://./..//node_modules/@azure/msal-browser/dist/src/request/RedirectRequest.d.ts
+    // file://./..//node_modules/@azure/msal-browser/dist/request/RedirectRequest.d.ts
     pub type RedirectRequest;
 
     #[wasm_bindgen(constructor)]
@@ -425,7 +427,7 @@ extern "C" {
     #[wasm_bindgen(method, setter = redirectStartPage)]
     pub fn set_redirect_start_page(this: &RedirectRequest, redirect_start_page: &str);
 
-    // file://./..//node_modules/@azure/msal-browser/dist/src/request/SilentRequest.d.ts
+    // file://./..//node_modules/@azure/msal-browser/dist/request/SilentRequest.d.ts
     pub type SilentRequest;
 
     #[wasm_bindgen(constructor)]
@@ -479,7 +481,10 @@ extern "C" {
     pub fn set_logger_callback_function(this: &LoggerOptions, logger_callback: &Function);
 
     #[wasm_bindgen(method, setter = loggerCallback)]
-    pub fn set_logger_callback(this: &LoggerOptions, logger_callback: &Closure<dyn Fn(String, String, bool)>);
+    pub fn set_logger_callback(
+        this: &LoggerOptions,
+        logger_callback: &Closure<dyn Fn(String, String, bool)>,
+    );
 
     #[wasm_bindgen(method, getter = piiLoggingEnabled)]
     pub fn pii_logging_enabled(this: &LoggerOptions) -> Option<bool>;
@@ -500,7 +505,7 @@ extern "C" {
 #[wasm_bindgen(module = "/node_modules/@azure/msal-browser/dist/index.es.js")]
 extern "C" {
 
-    //file://./../node_modules/@azure/msal-browser/dist/src/app/PublicClientApplication.d.ts
+    //file://./../node_modules/@azure/msal-browser/dist/app/PublicClientApplication.d.ts
     pub type PublicClientApplication;
 
     #[wasm_bindgen(constructor)]
@@ -512,7 +517,9 @@ extern "C" {
     /// returns an AuthenticationResult
     /// have to call this on every page load and check if its null
     #[wasm_bindgen(method, js_name = handleRedirectPromise, catch)]
-    pub async fn handle_redirect_promise(this: &PublicClientApplication) -> Result<JsValue, JsValue>;
+    pub async fn handle_redirect_promise(
+        this: &PublicClientApplication,
+    ) -> Result<JsValue, JsValue>;
 
     #[wasm_bindgen(method, js_name = loginPopup, catch)]
     pub async fn login_popup(
@@ -568,7 +575,7 @@ extern "C" {
         request: AuthorizationUrlRequest,
     ) -> Result<JsValue, JsValue>;
 
-    //file://./../node_modules/@azure/msal-common/dist/src/response/AuthenticationResult.d.ts
+    //file://./../node_modules/@azure/msal-common/dist/response/AuthenticationResult.d.ts
     // This is in the index, but only a constructor, so type checking fails
     pub type AuthenticationResult;
 
@@ -613,7 +620,7 @@ extern "C" {
     #[wasm_bindgen(method, getter = familyId)]
     pub fn family_id(this: &AuthenticationResult) -> Option<String>;
 
-    //file://./../node_modules/@azure/msal-common/dist/src/logger/Logger.d.ts
+    //file://./../node_modules/@azure/msal-common/dist/logger/Logger.d.ts
     pub type LogLevel;
 }
 
@@ -695,22 +702,4 @@ impl<'a> From<JsHashMapStrStr<'a>> for Map {
         }
         js
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // wasm_bindgen_test_configure!(run_in_browser);
-
-    // use super::*;
-    // use crate::{TokenClaim, TokenClaims};
-    // use wasm_bindgen_test::*;
-
-    // #[wasm_bindgen(module = "/msal-object-examples.js")]
-    // extern "C" {
-    //     static accessToken: Object;
-    //     static idToken: Object;
-    //     static completeToken: Object;
-    // }
-
-
 }

@@ -1,2 +1,0 @@
-# This is to stop removoing async from extern C.. only on nightly channel though
-ignore = [ "src/msal.rs"]

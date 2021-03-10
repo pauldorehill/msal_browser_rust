@@ -611,7 +611,7 @@ pub trait PublicClientApplication: msal::Msal {
             .map(Into::into)
     }
 
-    fn logout<'a>(&self, request: Option<EndSessionRequest<'a>>) {
+    fn logout(&self, request: Option<EndSessionRequest>) {
         self.auth().logout(request.unwrap_or_default().into())
     }
 }
@@ -850,7 +850,6 @@ mod tests {
         let js_config: msal::Configuration = config.into();
         console::log_1(&"JS Configuration:".into());
         console::log_1(&js_config.clone());
-
         js_cast_checker::<msal::Configuration>(js_config.into());
     }
 
