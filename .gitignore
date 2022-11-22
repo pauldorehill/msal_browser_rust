@@ -5,4 +5,11 @@ pkg
 package-lock.json
 target
 Cargo.lock
-node_modules
+node_modules/*
+!node_modules/@azure
+node_modules/@azure/*
+!node_modules/@azure/msal-browser
+node_modules/@azure/msal-browser/*
+!node_modules/@azure/msal-browser/dist
+node_modules/@azure/msal-browser/dist/*
+!node_modules/@azure/msal-browser/dist/index.js
