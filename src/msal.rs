@@ -23,7 +23,7 @@ pub trait Msal {
 
 // TODO: Use a macro rules for the extern binding generation?
 
-#[wasm_bindgen(module = "/msal-browser-gobblefunk.js")]
+#[wasm_bindgen(module = "/js/msal-browser-gobblefunk.js")]
 extern "C" {
     // file://./../node_modules/@azure/msal-browser/dist/config/Configuration.d.ts
     pub type BrowserAuthOptions;
@@ -501,11 +501,11 @@ extern "C" {
 
 }
 
-// file://./../node_modules/@azure/msal-browser/dist/index.es.js
-#[wasm_bindgen(module = "/node_modules/@azure/msal-browser/dist/index.es.js")]
+// file://./../node_modules/@azure/msal-browser/dist/index.js
+#[wasm_bindgen(module = "/js/msal-browser.js")]
 extern "C" {
 
-    //file://./../node_modules/@azure/msal-browser/dist/app/PublicClientApplication.d.ts
+    // file://./../node_modules/@azure/msal-browser/dist/app/PublicClientApplication.d.ts
     pub type PublicClientApplication;
 
     #[wasm_bindgen(constructor)]
@@ -514,8 +514,8 @@ extern "C" {
     #[wasm_bindgen(method, getter)]
     pub fn config(this: &PublicClientApplication) -> Configuration;
 
-    /// returns an AuthenticationResult
-    /// have to call this on every page load and check if its null
+    // returns an AuthenticationResult
+    // have to call this on every page load and check if its null
     #[wasm_bindgen(method, js_name = handleRedirectPromise, catch)]
     pub async fn handle_redirect_promise(
         this: &PublicClientApplication,
@@ -550,14 +550,14 @@ extern "C" {
         username: String,
     ) -> Option<AccountInfo>;
 
-    /// returns an AuthenticationResult
+    // returns an AuthenticationResult
     #[wasm_bindgen(method, catch, js_name = ssoSilent, catch)]
     pub async fn sso_silent(
         this: &PublicClientApplication,
         request: AuthorizationUrlRequest,
     ) -> Result<JsValue, JsValue>;
 
-    /// returns an AuthenticationResult
+    // returns an AuthenticationResult
     #[wasm_bindgen(method, catch, js_name = acquireTokenSilent, catch)]
     pub async fn acquire_token_silent(
         this: &PublicClientApplication,
@@ -575,7 +575,7 @@ extern "C" {
         request: AuthorizationUrlRequest,
     ) -> Result<JsValue, JsValue>;
 
-    //file://./../node_modules/@azure/msal-common/dist/response/AuthenticationResult.d.ts
+    // file://./../node_modules/@azure/msal-common/dist/response/AuthenticationResult.d.ts
     // This is in the index, but only a constructor, so type checking fails
     pub type AuthenticationResult;
 
@@ -588,7 +588,7 @@ extern "C" {
     #[wasm_bindgen(method, getter = tenantId)]
     pub fn tenant_id(this: &AuthenticationResult) -> String;
 
-    /// returns Vec<String>
+    // returns Vec<String>
     #[wasm_bindgen(method, getter)]
     pub fn scopes(this: &AuthenticationResult) -> Array;
 
@@ -598,7 +598,7 @@ extern "C" {
     #[wasm_bindgen(method, getter = idToken)]
     pub fn id_token(this: &AuthenticationResult) -> String;
 
-    /// Returns Hashmap<String, String | f64> ?
+    // Returns Hashmap<String, String | f64> ?
     #[wasm_bindgen(method, getter = idTokenClaims)]
     pub fn id_token_claims(this: &AuthenticationResult) -> Object;
 
@@ -620,7 +620,7 @@ extern "C" {
     #[wasm_bindgen(method, getter = familyId)]
     pub fn family_id(this: &AuthenticationResult) -> Option<String>;
 
-    //file://./../node_modules/@azure/msal-common/dist/logger/Logger.d.ts
+    // file://./../node_modules/@azure/msal-common/dist/logger/Logger.d.ts
     pub type LogLevel;
 }
 

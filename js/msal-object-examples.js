@@ -1,6 +1,6 @@
 // https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md
-// The configuration object has the following structure, and can be passed into the PublicClientApplication constructor. 
-// The only required config parameter is the client ID of the application. 
+// The configuration object has the following structure, and can be passed into the PublicClientApplication constructor.
+// The only required config parameter is the client ID of the application.
 // Everything else is optional, but may be required depending on your tenant and application model.
 
 //Include here so that can be tested
@@ -50,7 +50,8 @@ const system = {
         },
         piiLoggingEnabled: false,
         // @ts-ignore
-        logLevel: LogLevel.Error,
+        logLevel: LogLevel.Error
+        ,
     },
     windowHashTimeout: 60000,
     iframeHashTimeout: 6000,

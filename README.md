@@ -60,11 +60,5 @@ client_app.logout(None);
 ### Example
 There is an example app that uses the fantastic [dominator](https://github.com/Pauan/rust-dominator) dom library.
 
-Approx file sizes in kb:
-
-| File | Debug | Release | Release + minified
-| --- | --- | --- | --- |
-| wasm | 63 | 14 | 14
-| js | 363 | 363 | 113
-
-The js file bundles the `msal-browser.js` library.
+### Tests
+Curently there are tests that can be run using ```./run_tests.sh``` or `wasm-pack test --safari --headless -- --features "popup redirect`

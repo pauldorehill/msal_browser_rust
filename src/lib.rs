@@ -732,7 +732,7 @@ mod tests {
     pub const NAVIGATE_TO_LOGIN_REQUEST_URL: bool = true;
     pub const POST_LOGOUT_REDIRECT_URI: &str = "POST_LOGOUT_REDIRECT_URI";
 
-    #[wasm_bindgen(module = "/msal-object-examples.js")]
+    #[wasm_bindgen(module = "/js/msal-object-examples.js")]
     extern "C" {
         static authResponse: Object;
         static auth: Object;
@@ -867,7 +867,7 @@ mod tests {
             .set_cache_location(CacheLocation::Session)
             .set_store_auth_state_in_cookie(true);
 
-        fn logger_callback(_: LogLevel, _: String, _: bool) {};
+        fn logger_callback(_: LogLevel, _: String, _: bool) {}
 
         let logger_options = LoggerOptions::new()
             .set_log_level(LogLevel::Info)

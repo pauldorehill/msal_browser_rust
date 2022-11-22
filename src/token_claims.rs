@@ -177,7 +177,7 @@ mod tests {
     use wasm_bindgen_test::*;
     wasm_bindgen_test_configure!(run_in_browser);
 
-    #[wasm_bindgen(module = "/msal-object-examples.js")]
+    #[wasm_bindgen(module = "/js/msal-object-examples.js")]
     extern "C" {
         static accessToken: Object;
         static idToken: Object;
