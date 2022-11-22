@@ -2,7 +2,7 @@
 name = "example"
 version = "0.1.0"
 authors = ["Paul Dorehill"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
