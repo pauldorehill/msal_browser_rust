@@ -8,6 +8,19 @@ fn main() {
     std::fs::remove_file(js).unwrap_or(());
     std::fs::remove_file(js_map).unwrap_or(());
 
+    if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", "npm install"])
+            .output()
+            .expect("failed to execute process")
+    } else {
+        Command::new("sh")
+            .arg("-c")
+            .arg("npm install")
+            .output()
+            .expect("failed to execute process")
+    };
+
     let output = if cfg!(target_os = "windows") {
         Command::new("cmd")
             .args(["/C", "npm run build"])
