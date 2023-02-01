@@ -8,7 +8,19 @@ fn main() {
     std::fs::remove_file(js).unwrap_or(());
     std::fs::remove_file(js_map).unwrap_or(());
 
-    let output = Command::new("npm").args(["run", "build"]).output().unwrap();
+    let output = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", "npm run build"])
+            .output()
+            .expect("failed to execute process")
+    } else {
+        Command::new("sh")
+            .arg("-c")
+            .arg("npm run build")
+            .output()
+            .expect("failed to execute process")
+    };
+
     // https://nodejs.org/api/process.html#process_exit_codes
     if output.status.code() != Some(0) {
         panic!(
