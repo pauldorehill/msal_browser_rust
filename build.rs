@@ -1,5 +1,16 @@
 use std::process::Command;
 
+fn new_npm() -> Command {
+    const NPM: &str = "npm";
+    if cfg!(windows) {
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/c", NPM]);
+        cmd
+    } else {
+        Command::new(NPM)
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=package.json");
 
@@ -8,19 +19,8 @@ fn main() {
     std::fs::remove_file(js).unwrap_or(());
     std::fs::remove_file(js_map).unwrap_or(());
 
-    if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", "npm install"]).output()
-    } else {
-        Command::new("sh").args(["-c", "npm install"]).output()
-    }
-    .unwrap();
-
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(["/C", "npm run build"]).output()
-    } else {
-        Command::new("sh").args(["-c", "npm run build"]).output()
-    }
-    .unwrap();
+    new_npm().arg("install").spawn().unwrap().wait().unwrap();
+    let output = new_npm().args(["run", "build"]).output().unwrap();
 
     // https://nodejs.org/api/process.html#process_exit_codes
     if output.status.code() != Some(0) {
