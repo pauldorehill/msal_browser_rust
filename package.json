@@ -4,8 +4,8 @@
   },
   "type": "module",
   "devDependencies": {
-    "@azure/msal-browser": "=2.32.0",
+    "@azure/msal-browser": "=2.33.0",
     "@rollup/plugin-node-resolve": "^15.0.1",
-    "rollup": "^3.3.0"
+    "rollup": "^3.14.0"
   }
 }

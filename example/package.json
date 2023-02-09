@@ -6,7 +6,7 @@
   },
   "devDependencies": {
     "@rollup/plugin-terser": "^0.1.0",
-    "@wasm-tool/rollup-plugin-rust": "^2.3.2",
+    "@wasm-tool/rollup-plugin-rust": "=2.3.2",
     "rimraf": "^3.0.2",
     "rollup": "^3.3.0",
     "rollup-plugin-livereload": "^2.0.5",
